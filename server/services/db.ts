@@ -1,12 +1,24 @@
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { fileURLToPath } from 'url';
 import { User, Person, Transaction, Schedule, Reminder, NotificationItem, DailyPayment } from '../models/types.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const DATA_DIR = path.resolve(__dirname, '../data');
-const DB_FILE = path.join(DATA_DIR, 'db.json');
+
+// Original read-only seed data location
+const SEED_DATA_DIR = path.resolve(__dirname, '../data');
+const SEED_DB_FILE = path.join(SEED_DATA_DIR, 'db.json');
+
+// Writable target location (use os.tmpdir() on serverless / Vercel, fallback to local data dir)
+const WRITABLE_DIR = process.env.VERCEL || process.env.NODE_ENV === 'production'
+  ? os.tmpdir()
+  : SEED_DATA_DIR;
+
+const DB_FILE = process.env.VERCEL
+  ? path.join(os.tmpdir(), 'absolute_db.json')
+  : path.join(WRITABLE_DIR, 'db.json');
 
 export interface DatabaseSchema {
   users: User[];
@@ -38,14 +50,20 @@ class JsonDB {
   }
 
   private ensureDataDir() {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
+    try {
+      const dir = path.dirname(DB_FILE);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+    } catch (e) {
+      console.warn('⚠️ Data dir warning:', e);
     }
   }
 
   public load(): DatabaseSchema {
     this.ensureDataDir();
     try {
+      // 1. Check if writable DB_FILE exists
       if (fs.existsSync(DB_FILE)) {
         const fileContent = fs.readFileSync(DB_FILE, 'utf-8');
         const parsed = JSON.parse(fileContent);
@@ -58,14 +76,28 @@ class JsonDB {
           reminders: parsed.reminders || [],
           notifications: parsed.notifications || [],
         };
+        console.log(`📂 [JsonDB] Loaded ${this.data.dailyPayments.length} daily payments, ${this.data.schedules.length} schedules from ${DB_FILE}`);
+      } else if (fs.existsSync(SEED_DB_FILE)) {
+        // 2. Initial seed load from project seed file
+        const seedContent = fs.readFileSync(SEED_DB_FILE, 'utf-8');
+        const parsed = JSON.parse(seedContent);
+        this.data = {
+          users: parsed.users || [],
+          people: parsed.people || [],
+          transactions: parsed.transactions || [],
+          dailyPayments: parsed.dailyPayments || [],
+          schedules: parsed.schedules || [],
+          reminders: parsed.reminders || [],
+          notifications: parsed.notifications || [],
+        };
+        console.log(`🌱 [JsonDB] Seeded ${this.data.dailyPayments.length} daily payments from ${SEED_DB_FILE}`);
+        this.save();
       } else {
         this.data = defaultData;
         this.save();
       }
     } catch (err) {
-      console.error('Error loading db.json, initializing default:', err);
-      this.data = defaultData;
-      this.save();
+      console.error('⚠️ [JsonDB] Load error, retaining current memory data:', err);
     }
     this.isLoaded = true;
     return this.data;
@@ -75,8 +107,9 @@ class JsonDB {
     this.ensureDataDir();
     try {
       fs.writeFileSync(DB_FILE, JSON.stringify(this.data, null, 2), 'utf-8');
-    } catch (err) {
-      console.error('Error saving db.json:', err);
+      console.log(`💾 [JsonDB] Saved database (${this.data.dailyPayments.length} daily payments) to ${DB_FILE}`);
+    } catch (err: any) {
+      console.error('❌ [JsonDB] Error saving db:', err.message);
     }
   }
 
