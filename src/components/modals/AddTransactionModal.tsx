@@ -3,6 +3,7 @@ import { X, Receipt, ArrowDownLeft, ArrowUpRight, Calendar, User, CreditCard, Cl
 import { api } from '../../api/client';
 import { useCurrency } from '../../context/CurrencyContext';
 import { Person, TransactionDirection, TransactionType, PaymentMethod } from '../../types';
+import { getLocalDateString, parseNumericAmount } from '../../utils/date';
 
 interface AddTransactionModalProps {
   isOpen: boolean;
@@ -24,7 +25,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
   const [direction, setDirection] = useState<TransactionDirection>('THEY_OWE_ME');
   const [type, setType] = useState<TransactionType>('Expense');
   const [description, setDescription] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(getLocalDateString(new Date()));
   const [dueDate, setDueDate] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('UPI');
   const [notes, setNotes] = useState('');
@@ -53,7 +54,9 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
       setError('Please select or add a person first (use + Add Person)');
       return;
     }
-    if (!amount || parseFloat(amount) <= 0) {
+
+    const parsedAmt = parseNumericAmount(amount);
+    if (parsedAmt <= 0) {
       setError('Please enter a valid amount');
       return;
     }
@@ -68,14 +71,14 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
     try {
       await api.createTransaction({
         personId,
-        amount: parseFloat(amount),
+        amount: parsedAmt,
         direction,
         type,
-        description,
-        date,
+        description: description.trim(),
+        date: date || getLocalDateString(new Date()),
         dueDate: dueDate || undefined,
         paymentMethod,
-        notes: notes || undefined,
+        notes: notes ? notes.trim() : undefined,
       });
       onSuccess();
       onClose();

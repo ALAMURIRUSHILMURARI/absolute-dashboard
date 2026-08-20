@@ -5,6 +5,8 @@ import { Transaction, TransactionDirection, TransactionType, PaymentMethod, Tran
 import { authMiddleware, AuthenticatedRequest } from '../middleware/auth.js';
 import { calculatePersonBalances } from '../services/ledger.js';
 
+import { getLocalDateString, parseNumericAmount } from '../services/date.js';
+
 const router = Router();
 
 // GET /api/v1/transactions
@@ -47,19 +49,16 @@ router.post('/', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
       direction, // 'THEY_OWE_ME' or 'I_OWE_THEM'
       type = 'Expense',
       description,
-      date = new Date().toISOString().split('T')[0],
+      date = getLocalDateString(new Date()),
       paymentMethod = 'UPI',
       dueDate,
       notes,
     } = req.body;
 
-    if (!personId || !amount || !direction || !description) {
-      return res.status(400).json({ error: 'Person, amount, direction and description are required' });
-    }
+    const numericAmount = parseNumericAmount(amount);
 
-    const numericAmount = parseFloat(amount);
-    if (isNaN(numericAmount) || numericAmount <= 0) {
-      return res.status(400).json({ error: 'Amount must be a positive number' });
+    if (!personId || numericAmount <= 0 || !direction || !description || !description.trim()) {
+      return res.status(400).json({ error: 'Person, valid amount (> 0), direction and description are required' });
     }
 
     const person = db.people.find(p => p.id === personId && p.userId === userId);
@@ -67,7 +66,7 @@ router.post('/', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
       return res.status(404).json({ error: 'Person not found' });
     }
 
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = getLocalDateString(new Date());
     let initialStatus: TransactionStatus = 'Pending';
     if (dueDate && dueDate < todayStr) {
       initialStatus = 'Overdue';

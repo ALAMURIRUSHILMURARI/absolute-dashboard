@@ -4,6 +4,8 @@ import { db } from '../services/db.js';
 import { DailyPayment, DailyPaymentMethod, DailyPaymentFlow, DailyPaymentCategory } from '../models/types.js';
 import { authMiddleware, AuthenticatedRequest } from '../middleware/auth.js';
 
+import { getLocalDateString, parseNumericAmount } from '../services/date.js';
+
 const router = Router();
 
 // GET /api/v1/daily-payments
@@ -55,7 +57,7 @@ router.get('/', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
 router.get('/summary', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user!.id;
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = getLocalDateString(new Date());
     const currentMonthPrefix = todayStr.slice(0, 7); // YYYY-MM
 
     const allUserPayments = db.dailyPayments.filter(p => p.userId === userId);
@@ -176,14 +178,15 @@ router.post('/', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
       notes,
     } = req.body;
 
-    if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
+    const parsedAmt = parseNumericAmount(amount);
+    if (parsedAmt <= 0) {
       return res.status(400).json({ error: 'Valid payment amount is required' });
     }
     if (!reason || !reason.trim()) {
       return res.status(400).json({ error: 'Reason for payment is required' });
     }
 
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = getLocalDateString(new Date());
     const nowTimeStr = new Date().toTimeString().slice(0, 5);
 
     const validMethod: DailyPaymentMethod = paymentMethod === 'Cash' ? 'Cash' : 'UPI';
@@ -192,7 +195,7 @@ router.post('/', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
     const newPayment: DailyPayment = {
       id: uuidv4(),
       userId,
-      amount: parseFloat(amount),
+      amount: parsedAmt,
       reason: reason.trim(),
       paymentMethod: validMethod,
       flow: validFlow,
@@ -223,17 +226,18 @@ router.post('/bulk', authMiddleware, (req: AuthenticatedRequest, res: Response) 
       return res.status(400).json({ error: 'Array of payment items is required' });
     }
 
-    const defaultDate = date || new Date().toISOString().split('T')[0];
+    const defaultDate = date || getLocalDateString(new Date());
     const nowTime = new Date().toTimeString().slice(0, 5);
     const createdList: DailyPayment[] = [];
 
     for (const item of items) {
-      if (!item.amount || parseFloat(item.amount) <= 0 || !item.reason) continue;
+      const parsedItemAmt = parseNumericAmount(item.amount);
+      if (parsedItemAmt <= 0 || !item.reason || !item.reason.trim()) continue;
 
       const p: DailyPayment = {
         id: uuidv4(),
         userId,
-        amount: parseFloat(item.amount),
+        amount: parsedItemAmt,
         reason: item.reason.trim(),
         paymentMethod: item.paymentMethod === 'Cash' ? 'Cash' : 'UPI',
         flow: item.flow === 'INCOMING' ? 'INCOMING' : 'OUTGOING',

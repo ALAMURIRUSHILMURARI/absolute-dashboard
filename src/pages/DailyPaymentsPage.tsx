@@ -29,11 +29,12 @@ import {
   DailyPaymentCategory,
   DailyPaymentsSummary,
 } from '../types';
+import { getLocalDateString, parseNumericAmount } from '../utils/date';
 
 export const DailyPaymentsPage: React.FC = () => {
   const { symbol, formatMoney } = useCurrency();
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getLocalDateString(new Date());
   const [selectedDate, setSelectedDate] = useState<string>(todayStr);
 
   const [payments, setPayments] = useState<DailyPayment[]>([]);
@@ -110,7 +111,8 @@ export const DailyPaymentsPage: React.FC = () => {
 
   const handleAddPayment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!amount || parseFloat(amount) <= 0) {
+    const parsedAmt = parseNumericAmount(amount);
+    if (parsedAmt <= 0) {
       setError('Please enter a valid amount');
       return;
     }
@@ -125,11 +127,11 @@ export const DailyPaymentsPage: React.FC = () => {
     try {
       if (editingPayment) {
         await api.updateDailyPayment(editingPayment.id, {
-          amount: parseFloat(amount),
+          amount: parsedAmt,
           reason: reason.trim(),
           flow,
           paymentMethod,
-          date: selectedDate,
+          date: selectedDate || getLocalDateString(new Date()),
           category,
           notes: notes ? notes.trim() : undefined,
         });
@@ -137,17 +139,17 @@ export const DailyPaymentsPage: React.FC = () => {
         setSuccessMsg('Payment updated successfully!');
       } else {
         await api.createDailyPayment({
-          amount: parseFloat(amount),
+          amount: parsedAmt,
           reason: reason.trim(),
           flow,
           paymentMethod,
-          date: selectedDate, // Defaultly fixed per selected date
+          date: selectedDate || getLocalDateString(new Date()), // Defaultly fixed per selected date
           time: new Date().toTimeString().slice(0, 5),
           category,
           notes: notes ? notes.trim() : undefined,
         });
         setSuccessMsg(
-          `${flow === 'INCOMING' ? '+₹' : '-₹'}${amount} (${flow === 'INCOMING' ? 'Received' : 'Spent'}) recorded via ${paymentMethod}!`
+          `${flow === 'INCOMING' ? '+₹' : '-₹'}${parsedAmt} (${flow === 'INCOMING' ? 'Received' : 'Spent'}) recorded via ${paymentMethod}!`
         );
       }
 
