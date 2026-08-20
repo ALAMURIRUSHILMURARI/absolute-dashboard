@@ -243,10 +243,8 @@ export const DailyPaymentsPage: React.FC = () => {
     setSelectedDate(getLocalDateString(d));
   };
 
-  // Filter payments (default ALL shows entire payment history grouped by date so no entries are hidden)
+  // Filter payments (always displays complete history grouped by date section so no entries are ever hidden)
   const filteredPayments = payments.filter(p => {
-    if (dateScope === 'SELECTED' && p.date !== selectedDate) return false;
-
     const matchesSearch =
       p.reason.toLowerCase().includes(search.toLowerCase()) ||
       (p.notes && p.notes.toLowerCase().includes(search.toLowerCase())) ||
@@ -839,29 +837,9 @@ export const DailyPaymentsPage: React.FC = () => {
                   Payments Timeline ({filteredPayments.length})
                 </h3>
 
-                {/* Date Scope Pills */}
-                <div className="p-1 rounded-xl bg-[#1D1B1A] border border-[#FAF6F0]/10 flex items-center gap-1 ml-2">
-                  <button
-                    onClick={() => setDateScope('SELECTED')}
-                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${
-                      dateScope === 'SELECTED'
-                        ? 'bg-[#D36B4E] text-[#FAF6F0] shadow-sm'
-                        : 'text-[#A49690] hover:text-[#FAF6F0]'
-                    }`}
-                  >
-                    Only {selectedDate} ({selectedDatePayments.length})
-                  </button>
-                  <button
-                    onClick={() => setDateScope('ALL')}
-                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${
-                      dateScope === 'ALL'
-                        ? 'bg-[#3AB4B9] text-[#0A0A0A] shadow-sm'
-                        : 'text-[#A49690] hover:text-[#FAF6F0]'
-                    }`}
-                  >
-                    All Dates ({payments.length})
-                  </button>
-                </div>
+                <span className="px-2.5 py-1 rounded-xl bg-[#3AB4B9]/15 border border-[#3AB4B9]/30 text-[#3AB4B9] text-[10px] font-bold uppercase tracking-widest ml-2">
+                  Complete History ({filteredPayments.length})
+                </span>
               </div>
 
               {/* Flow Filter pills */}
