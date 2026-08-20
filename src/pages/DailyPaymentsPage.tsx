@@ -229,7 +229,7 @@ export const DailyPaymentsPage: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const [dateScope, setDateScope] = useState<'SELECTED' | 'ALL'>('SELECTED');
+  const [dateScope, setDateScope] = useState<'SELECTED' | 'ALL'>('ALL');
 
   const handlePrevDay = () => {
     const parts = selectedDate.split('-').map(Number);
@@ -243,7 +243,7 @@ export const DailyPaymentsPage: React.FC = () => {
     setSelectedDate(getLocalDateString(d));
   };
 
-  // Filter payments strictly by selectedDate when dateScope === 'SELECTED'
+  // Filter payments (default ALL shows entire payment history grouped by date so no entries are hidden)
   const filteredPayments = payments.filter(p => {
     if (dateScope === 'SELECTED' && p.date !== selectedDate) return false;
 
@@ -256,6 +256,15 @@ export const DailyPaymentsPage: React.FC = () => {
     const matchesFlow = filterFlow === 'All' || (p.flow || 'OUTGOING') === filterFlow;
     return matchesSearch && matchesMethod && matchesFlow;
   });
+
+  // Group filtered payments by date (newest date first)
+  const groupedPaymentsMap = filteredPayments.reduce((acc, p) => {
+    if (!acc[p.date]) acc[p.date] = [];
+    acc[p.date].push(p);
+    return acc;
+  }, {} as Record<string, DailyPayment[]>);
+
+  const sortedDates = Object.keys(groupedPaymentsMap).sort((a, b) => b.localeCompare(a));
 
   // Calculate stats for the currently selected date
   const selectedDatePayments = payments.filter(p => p.date === selectedDate);
@@ -944,87 +953,122 @@ export const DailyPaymentsPage: React.FC = () => {
                 )}
               </div>
             ) : (
-              <div className="space-y-3">
-                {filteredPayments.map(p => {
-                  const isIncoming = p.flow === 'INCOMING';
-                  const isUPI = p.paymentMethod === 'UPI';
-                  const isSelectedDate = p.date === selectedDate;
+              <div className="space-y-6">
+                {sortedDates.map(dateKey => {
+                  const dateGroupPayments = groupedPaymentsMap[dateKey];
+                  const isTodayGroup = dateKey === todayStr;
+
+                  const groupOutgoing = dateGroupPayments
+                    .filter(p => (p.flow || 'OUTGOING') === 'OUTGOING')
+                    .reduce((acc, p) => acc + p.amount, 0);
+                  const groupIncoming = dateGroupPayments
+                    .filter(p => p.flow === 'INCOMING')
+                    .reduce((acc, p) => acc + p.amount, 0);
+                  const groupNet = groupIncoming - groupOutgoing;
 
                   return (
-                    <div
-                      key={p.id}
-                      className={`p-4 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 group ${
-                        isSelectedDate
-                          ? 'bg-[#1D1B1A] border-[#FAF6F0]/20 shadow-sm'
-                          : 'bg-[#141211] border-[#FAF6F0]/10 hover:border-[#FAF6F0]/20'
-                      }`}
-                    >
-                      <div className="flex items-start gap-3.5">
-                        <div
-                          className={`p-2.5 rounded-xl shrink-0 mt-0.5 ${
-                            isIncoming ? 'bg-[#3AB4B9]/15 text-[#3AB4B9]' : 'bg-[#D36B4E]/15 text-[#D36B4E]'
-                          }`}
-                        >
-                          {isIncoming ? <ArrowDownLeft className="w-4 h-4" /> : <ArrowUpRight className="w-4 h-4" />}
+                    <div key={dateKey} className="space-y-2.5">
+                      {/* Date Group Header */}
+                      <div className="flex items-center justify-between px-2.5 py-1.5 rounded-xl bg-[#181514] border border-[#FAF6F0]/10">
+                        <div className="flex items-center gap-2">
+                          <CalendarIcon className={`w-3.5 h-3.5 ${isTodayGroup ? 'text-[#D36B4E]' : 'text-[#3AB4B9]'}`} />
+                          <span className={`text-xs font-bold font-mono ${isTodayGroup ? 'text-[#D36B4E]' : 'text-[#FAF6F0]'}`}>
+                            {isTodayGroup ? `TODAY (${dateKey})` : dateKey}
+                          </span>
+                          <span className="text-[10px] text-[#A49690] font-semibold">
+                            ({dateGroupPayments.length} item{dateGroupPayments.length === 1 ? '' : 's'})
+                          </span>
                         </div>
-
-                        <div>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <h4 className="text-xs font-bold text-[#FAF6F0]">{p.reason}</h4>
-
-                            <span
-                              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                isIncoming
-                                  ? 'bg-[#3AB4B9]/15 text-[#3AB4B9] border border-[#3AB4B9]/30'
-                                  : 'bg-[#D36B4E]/15 text-[#D36B4E] border border-[#D36B4E]/30'
-                              }`}
-                            >
-                              {isIncoming ? 'INCOMING' : 'OUTGOING'}
-                            </span>
-
-                            <span className="px-2 py-0.5 rounded text-[10px] bg-[#121212] text-[#A49690] border border-[#FAF6F0]/10">
-                              {p.paymentMethod}
-                            </span>
-
-                            {p.category && (
-                              <span className="px-2 py-0.5 rounded text-[10px] bg-[#121212] text-[#A49690]">
-                                {p.category}
-                              </span>
-                            )}
-                          </div>
-
-                          <p className="text-[11px] text-[#A49690] mt-1 font-mono">
-                            {p.date} {p.time ? `at ${p.time}` : ''}
-                            {p.notes ? ` • "${p.notes}"` : ''}
-                          </p>
-                        </div>
+                        <span className={`text-xs font-mono font-bold ${groupNet >= 0 ? 'text-[#3AB4B9]' : 'text-[#D36B4E]'}`}>
+                          Day Net: {groupNet >= 0 ? `+${formatMoney(groupNet)}` : `-${formatMoney(Math.abs(groupNet))}`}
+                        </span>
                       </div>
 
-                      <div className="flex items-center justify-between sm:justify-end gap-3 pl-11 sm:pl-0">
-                        <span
-                          className={`font-mono text-base font-extrabold ${
-                            isIncoming ? 'text-[#3AB4B9]' : 'text-[#D36B4E]'
-                          }`}
-                        >
-                          {isIncoming ? '+' : '-'} {formatMoney(p.amount)}
-                        </span>
+                      {/* Payment Cards in this date group */}
+                      <div className="space-y-2.5">
+                        {dateGroupPayments.map(p => {
+                          const isIncoming = p.flow === 'INCOMING';
+                          const isSelectedDate = p.date === selectedDate;
 
-                        <div className="flex items-center gap-1 opacity-80 sm:opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            onClick={() => handleEditClick(p)}
-                            className="p-1.5 text-[#A49690] hover:text-[#3AB4B9] rounded-lg hover:bg-[#121212] transition-colors"
-                            title="Edit"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleDeletePayment(p.id)}
-                            className="p-1.5 text-[#A49690] hover:text-[#D36B4E] rounded-lg hover:bg-[#121212] transition-colors"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
+                          return (
+                            <div
+                              key={p.id}
+                              className={`p-4 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 group ${
+                                isSelectedDate
+                                  ? 'bg-[#1D1B1A] border-[#FAF6F0]/20 shadow-sm'
+                                  : 'bg-[#141211] border-[#FAF6F0]/10 hover:border-[#FAF6F0]/20'
+                              }`}
+                            >
+                              <div className="flex items-start gap-3.5">
+                                <div
+                                  className={`p-2.5 rounded-xl shrink-0 mt-0.5 ${
+                                    isIncoming ? 'bg-[#3AB4B9]/15 text-[#3AB4B9]' : 'bg-[#D36B4E]/15 text-[#D36B4E]'
+                                  }`}
+                                >
+                                  {isIncoming ? <ArrowDownLeft className="w-4 h-4" /> : <ArrowUpRight className="w-4 h-4" />}
+                                </div>
+
+                                <div>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <h4 className="text-xs font-bold text-[#FAF6F0]">{p.reason}</h4>
+
+                                    <span
+                                      className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                        isIncoming
+                                          ? 'bg-[#3AB4B9]/15 text-[#3AB4B9] border border-[#3AB4B9]/30'
+                                          : 'bg-[#D36B4E]/15 text-[#D36B4E] border border-[#D36B4E]/30'
+                                      }`}
+                                    >
+                                      {isIncoming ? 'INCOMING' : 'OUTGOING'}
+                                    </span>
+
+                                    <span className="px-2 py-0.5 rounded text-[10px] bg-[#121212] text-[#A49690] border border-[#FAF6F0]/10">
+                                      {p.paymentMethod}
+                                    </span>
+
+                                    {p.category && (
+                                      <span className="px-2 py-0.5 rounded text-[10px] bg-[#121212] text-[#A49690]">
+                                        {p.category}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <p className="text-[11px] text-[#A49690] mt-1 font-mono">
+                                    {p.date} {p.time ? `at ${p.time}` : ''}
+                                    {p.notes ? ` • "${p.notes}"` : ''}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center justify-between sm:justify-end gap-3 pl-11 sm:pl-0">
+                                <span
+                                  className={`font-mono text-base font-extrabold ${
+                                    isIncoming ? 'text-[#3AB4B9]' : 'text-[#D36B4E]'
+                                  }`}
+                                >
+                                  {isIncoming ? '+' : '-'} {formatMoney(p.amount)}
+                                </span>
+
+                                <div className="flex items-center gap-1 opacity-80 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <button
+                                    onClick={() => handleEditClick(p)}
+                                    className="p-1.5 text-[#A49690] hover:text-[#3AB4B9] rounded-lg hover:bg-[#121212] transition-colors"
+                                    title="Edit"
+                                  >
+                                    <Edit2 className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeletePayment(p.id)}
+                                    className="p-1.5 text-[#A49690] hover:text-[#D36B4E] rounded-lg hover:bg-[#121212] transition-colors"
+                                    title="Delete"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   );
