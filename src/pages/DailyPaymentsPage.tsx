@@ -229,20 +229,24 @@ export const DailyPaymentsPage: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const [dateScope, setDateScope] = useState<'SELECTED' | 'ALL'>('SELECTED');
+
   const handlePrevDay = () => {
-    const d = new Date(selectedDate);
-    d.setDate(d.getDate() - 1);
-    setSelectedDate(d.toISOString().split('T')[0]);
+    const parts = selectedDate.split('-').map(Number);
+    const d = new Date(parts[0], parts[1] - 1, parts[2] - 1);
+    setSelectedDate(getLocalDateString(d));
   };
 
   const handleNextDay = () => {
-    const d = new Date(selectedDate);
-    d.setDate(d.getDate() + 1);
-    setSelectedDate(d.toISOString().split('T')[0]);
+    const parts = selectedDate.split('-').map(Number);
+    const d = new Date(parts[0], parts[1] - 1, parts[2] + 1);
+    setSelectedDate(getLocalDateString(d));
   };
 
-  // Group and filter payments
+  // Group and filter payments strictly by selectedDate (when dateScope === 'SELECTED')
   const filteredPayments = payments.filter(p => {
+    if (dateScope === 'SELECTED' && p.date !== selectedDate) return false;
+
     const matchesSearch =
       p.reason.toLowerCase().includes(search.toLowerCase()) ||
       (p.notes && p.notes.toLowerCase().includes(search.toLowerCase())) ||
@@ -820,11 +824,35 @@ export const DailyPaymentsPage: React.FC = () => {
           <div className="p-6 rounded-3xl bg-[#121212] border border-[#FAF6F0]/10 shadow-xl space-y-4">
             {/* Header & Filter options */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#FAF6F0]/10 pb-4">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <FileSpreadsheet className="w-4 h-4 text-[#3AB4B9]" />
                 <h3 className="text-xs font-bold text-[#FAF6F0] uppercase tracking-widest">
                   Payments Timeline ({filteredPayments.length})
                 </h3>
+
+                {/* Date Scope Pills */}
+                <div className="p-1 rounded-xl bg-[#1D1B1A] border border-[#FAF6F0]/10 flex items-center gap-1 ml-2">
+                  <button
+                    onClick={() => setDateScope('SELECTED')}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${
+                      dateScope === 'SELECTED'
+                        ? 'bg-[#3AB4B9] text-[#0A0A0A]'
+                        : 'text-[#A49690] hover:text-[#FAF6F0]'
+                    }`}
+                  >
+                    Only {selectedDate}
+                  </button>
+                  <button
+                    onClick={() => setDateScope('ALL')}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${
+                      dateScope === 'ALL'
+                        ? 'bg-[#D36B4E] text-[#FAF6F0]'
+                        : 'text-[#A49690] hover:text-[#FAF6F0]'
+                    }`}
+                  >
+                    All History
+                  </button>
+                </div>
               </div>
 
               {/* Flow Filter pills */}
