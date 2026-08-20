@@ -169,8 +169,25 @@ class ApiClient {
     });
   }
 
+  private getLocalVaultPayments(): DailyPayment[] {
+    try {
+      const stored = localStorage.getItem('ABSOLUTE_VAULT_PAYMENTS');
+      return stored ? JSON.parse(stored) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  private saveLocalVaultPayments(payments: DailyPayment[]) {
+    try {
+      localStorage.setItem('ABSOLUTE_VAULT_PAYMENTS', JSON.stringify(payments));
+    } catch (e) {
+      console.warn('Vault cache save warning:', e);
+    }
+  }
+
   // Daily Payments
-  async getDailyPayments(params?: { date?: string; startDate?: string; endDate?: string; method?: string; flow?: string; search?: string }): Promise<{ payments: DailyPayment[] }> {
+  async getDailyPayments(params?: { date?: string; startDate?: string; endDate?: string; method?: string; flow?: string; search?: string }): Promise<{ payments: DailyPayment[]; totalCount: number }> {
     const query = new URLSearchParams();
     if (params?.date) query.set('date', params.date);
     if (params?.startDate) query.set('startDate', params.startDate);
@@ -179,7 +196,44 @@ class ApiClient {
     if (params?.flow) query.set('flow', params.flow);
     if (params?.search) query.set('search', params.search);
     const qs = query.toString() ? `?${query.toString()}` : '';
-    return this.request(`/daily-payments${qs}`);
+
+    try {
+      const res = await this.request<{ payments: DailyPayment[]; totalCount: number }>(`/daily-payments${qs}`);
+      const localVault = this.getLocalVaultPayments();
+
+      // Check if localVault has items that are missing from server (e.g. Vercel serverless cold restart)
+      const serverIds = new Set(res.payments.map(p => p.id));
+      const missingLocalItems = localVault.filter(lp => !serverIds.has(lp.id));
+
+      if (missingLocalItems.length > 0 && !params?.date && !params?.search) {
+        // Auto sync missing items back to server in background
+        this.bulkCreateDailyPayments({
+          items: missingLocalItems.map(item => ({
+            amount: item.amount,
+            reason: item.reason,
+            flow: item.flow,
+            paymentMethod: item.paymentMethod,
+            date: item.date,
+            time: item.time,
+            category: item.category,
+            notes: item.notes,
+          })),
+        }).catch(err => console.warn('Background sync warning:', err));
+
+        const combined = [...res.payments, ...missingLocalItems];
+        this.saveLocalVaultPayments(combined);
+        return { payments: combined, totalCount: combined.length };
+      } else {
+        if (!params?.date && !params?.search && res.payments.length > 0) {
+          this.saveLocalVaultPayments(res.payments);
+        }
+        return res;
+      }
+    } catch (err) {
+      // Server connection fallback: return local vault cached payments
+      const localVault = this.getLocalVaultPayments();
+      return { payments: localVault, totalCount: localVault.length };
+    }
   }
 
   async getDailyPaymentsSummary(): Promise<DailyPaymentsSummary> {
@@ -187,30 +241,53 @@ class ApiClient {
   }
 
   async createDailyPayment(payload: Partial<DailyPayment>): Promise<{ payment: DailyPayment }> {
-    return this.request('/daily-payments', {
+    const res = await this.request<{ payment: DailyPayment }>('/daily-payments', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
+
+    if (res?.payment) {
+      const currentVault = this.getLocalVaultPayments();
+      this.saveLocalVaultPayments([res.payment, ...currentVault.filter(p => p.id !== res.payment.id)]);
+    }
+    return res;
   }
 
   async bulkCreateDailyPayments(payload: { items: Partial<DailyPayment>[]; date?: string }): Promise<{ message: string; payments: DailyPayment[] }> {
-    return this.request('/daily-payments/bulk', {
+    const res = await this.request<{ message: string; payments: DailyPayment[] }>('/daily-payments/bulk', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
+
+    if (res?.payments && Array.isArray(res.payments)) {
+      const currentVault = this.getLocalVaultPayments();
+      const newIds = new Set(res.payments.map(p => p.id));
+      this.saveLocalVaultPayments([...res.payments, ...currentVault.filter(p => !newIds.has(p.id))]);
+    }
+    return res;
   }
 
   async updateDailyPayment(id: string, payload: Partial<DailyPayment>): Promise<{ payment: DailyPayment }> {
-    return this.request(`/daily-payments/${id}`, {
+    const res = await this.request<{ payment: DailyPayment }>(`/daily-payments/${id}`, {
       method: 'PUT',
       body: JSON.stringify(payload),
     });
+
+    if (res?.payment) {
+      const currentVault = this.getLocalVaultPayments();
+      this.saveLocalVaultPayments(currentVault.map(p => (p.id === id ? res.payment : p)));
+    }
+    return res;
   }
 
   async deleteDailyPayment(id: string): Promise<{ message: string }> {
-    return this.request(`/daily-payments/${id}`, {
+    const res = await this.request<{ message: string }>(`/daily-payments/${id}`, {
       method: 'DELETE',
     });
+
+    const currentVault = this.getLocalVaultPayments();
+    this.saveLocalVaultPayments(currentVault.filter(p => p.id !== id));
+    return res;
   }
 
   // Schedules
