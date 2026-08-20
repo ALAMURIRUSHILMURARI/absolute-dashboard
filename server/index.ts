@@ -7,6 +7,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { db } from './services/db.js';
+import { connectMongo, isMongoConnected } from './services/mongo.js';
 import { seedDemoData } from './services/seed.js';
 
 import authRouter from './routes/auth.js';
@@ -45,8 +46,9 @@ app.use((req, res, next) => {
   next();
 });
 
-// Initialize database & Seed initial demo user and records
+// Initialize database & Connect MongoDB if URI is provided
 db.load();
+connectMongo().catch(err => console.warn('Mongo connection error:', err));
 seedDemoData();
 
 // REST API v1 Routes
@@ -68,6 +70,7 @@ app.get('/api/v1/health', (req, res) => {
     status: 'online',
     appName: 'ABSOLUTE',
     version: '1.0.0',
+    mongoConnected: isMongoConnected(),
     timestamp: new Date().toISOString(),
     smtpConfigured: Boolean(process.env.SMTP_USER || db.users.some(u => u.preferences?.smtpUser)),
   });

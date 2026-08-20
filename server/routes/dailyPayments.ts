@@ -1,20 +1,43 @@
 import { Router, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../services/db.js';
+import { isMongoConnected } from '../services/mongo.js';
+import { DailyPaymentModel } from '../models/mongooseSchemas.js';
 import { DailyPayment, DailyPaymentMethod, DailyPaymentFlow, DailyPaymentCategory } from '../models/types.js';
 import { authMiddleware, AuthenticatedRequest } from '../middleware/auth.js';
-
 import { getLocalDateString, parseNumericAmount } from '../services/date.js';
 
 const router = Router();
 
+// Helper to fetch user payments from Mongo or JsonDB
+const fetchUserPayments = async (userId: string): Promise<DailyPayment[]> => {
+  if (isMongoConnected()) {
+    const docs = await DailyPaymentModel.find({ userId }).lean();
+    return docs.map(d => ({
+      id: d.id,
+      userId: d.userId,
+      amount: d.amount,
+      reason: d.reason,
+      paymentMethod: d.paymentMethod,
+      flow: d.flow,
+      date: d.date,
+      time: d.time,
+      category: d.category,
+      notes: d.notes,
+      createdAt: d.createdAt ? new Date(d.createdAt).toISOString() : new Date().toISOString(),
+      updatedAt: d.updatedAt ? new Date(d.updatedAt).toISOString() : new Date().toISOString(),
+    })) as DailyPayment[];
+  }
+  return db.dailyPayments.filter(p => p.userId === userId);
+};
+
 // GET /api/v1/daily-payments
-router.get('/', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+router.get('/', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user!.id;
     const { date, startDate, endDate, method, flow, search } = req.query;
 
-    let payments = db.dailyPayments.filter(p => p.userId === userId);
+    let payments = await fetchUserPayments(userId);
 
     if (date) {
       payments = payments.filter(p => p.date === date);
@@ -47,20 +70,20 @@ router.get('/', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
       return (b.time || '').localeCompare(a.time || '') || b.createdAt.localeCompare(a.createdAt);
     });
 
-    return res.json({ payments });
+    return res.json({ payments, totalCount: payments.length });
   } catch (err: any) {
     return res.status(500).json({ error: err.message || 'Failed to fetch daily payments' });
   }
 });
 
 // GET /api/v1/daily-payments/summary
-router.get('/summary', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+router.get('/summary', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user!.id;
     const todayStr = getLocalDateString(new Date());
     const currentMonthPrefix = todayStr.slice(0, 7); // YYYY-MM
 
-    const allUserPayments = db.dailyPayments.filter(p => p.userId === userId);
+    const allUserPayments = await fetchUserPayments(userId);
 
     let todayOutgoing = 0;
     let todayIncoming = 0;
@@ -111,9 +134,8 @@ router.get('/summary', authMiddleware, (req: AuthenticatedRequest, res: Response
         } else {
           todayOutgoing += amt;
         }
-
         if (p.paymentMethod === 'UPI') todayUpi += amt;
-        else todayCash += amt;
+        if (p.paymentMethod === 'Cash') todayCash += amt;
       }
 
       // Month stats
@@ -122,23 +144,25 @@ router.get('/summary', authMiddleware, (req: AuthenticatedRequest, res: Response
           monthIncoming += amt;
         } else {
           monthOutgoing += amt;
+          // Track expense categories
+          const cat = p.category || 'Other';
+          categoryMap[cat] = (categoryMap[cat] || 0) + amt;
         }
-
         if (p.paymentMethod === 'UPI') monthUpi += amt;
-        else monthCash += amt;
-
-        const cat = p.category || 'Other';
-        categoryMap[cat] = (categoryMap[cat] || 0) + amt;
+        if (p.paymentMethod === 'Cash') monthCash += amt;
       }
     }
+
+    const todayNet = todayIncoming - todayOutgoing;
+    const monthNet = monthIncoming - monthOutgoing;
 
     return res.json({
       today: {
         date: todayStr,
         outgoing: todayOutgoing,
         incoming: todayIncoming,
-        net: todayIncoming - todayOutgoing,
-        total: todayOutgoing, // for backwards compatibility
+        net: todayNet,
+        total: todayOutgoing,
         upi: todayUpi,
         cash: todayCash,
         count: todayCount,
@@ -147,172 +171,204 @@ router.get('/summary', authMiddleware, (req: AuthenticatedRequest, res: Response
         month: currentMonthPrefix,
         outgoing: monthOutgoing,
         incoming: monthIncoming,
-        net: monthIncoming - monthOutgoing,
+        net: monthNet,
         total: monthOutgoing,
         upi: monthUpi,
         cash: monthCash,
       },
-      categoryBreakdown: Object.entries(categoryMap).map(([category, amount]) => ({
-        category,
-        amount,
-      })),
+      categories: categoryMap,
       dateTotals: dateTotalsMap,
     });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message || 'Failed to calculate summary' });
+    return res.status(500).json({ error: err.message || 'Failed to fetch summary' });
   }
 });
 
-// POST /api/v1/daily-payments (Single entry)
-router.post('/', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+// POST /api/v1/daily-payments
+router.post('/', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user!.id;
-    const {
-      amount,
-      reason,
-      paymentMethod = 'UPI',
-      flow = 'OUTGOING',
-      date,
-      time,
-      category = 'Food & Dining',
-      notes,
-    } = req.body;
+    const { amount, reason, paymentMethod, flow, date, time, category, notes } = req.body;
 
     const parsedAmt = parseNumericAmount(amount);
     if (parsedAmt <= 0) {
-      return res.status(400).json({ error: 'Valid payment amount is required' });
+      return res.status(400).json({ error: 'Valid positive amount is required' });
     }
-    if (!reason || !reason.trim()) {
-      return res.status(400).json({ error: 'Reason for payment is required' });
+    if (!reason || typeof reason !== 'string' || !reason.trim()) {
+      return res.status(400).json({ error: 'Reason / description is required' });
+    }
+    if (paymentMethod && paymentMethod !== 'UPI' && paymentMethod !== 'Cash') {
+      return res.status(400).json({ error: 'Payment method must be UPI or Cash' });
     }
 
-    const todayStr = getLocalDateString(new Date());
-    const nowTimeStr = new Date().toTimeString().slice(0, 5);
-
-    const validMethod: DailyPaymentMethod = paymentMethod === 'Cash' ? 'Cash' : 'UPI';
-    const validFlow: DailyPaymentFlow = flow === 'INCOMING' ? 'INCOMING' : 'OUTGOING';
+    const now = new Date();
+    const paymentDate = date && typeof date === 'string' && date.trim() ? date.trim() : getLocalDateString(now);
 
     const newPayment: DailyPayment = {
       id: uuidv4(),
       userId,
       amount: parsedAmt,
       reason: reason.trim(),
-      paymentMethod: validMethod,
-      flow: validFlow,
-      date: date || todayStr,
-      time: time || nowTimeStr,
-      category: category as DailyPaymentCategory,
-      notes: notes ? notes.trim() : undefined,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      paymentMethod: paymentMethod || 'UPI',
+      flow: flow === 'INCOMING' ? 'INCOMING' : 'OUTGOING',
+      date: paymentDate,
+      time: time || now.toTimeString().slice(0, 5),
+      category: category || (flow === 'INCOMING' ? 'Income & Salary' : 'Other'),
+      notes: notes && typeof notes === 'string' ? notes.trim() : undefined,
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
     };
 
-    db.dailyPayments.push(newPayment);
-    db.save();
+    if (isMongoConnected()) {
+      await DailyPaymentModel.create(newPayment);
+    } else {
+      db.dailyPayments.push(newPayment);
+      db.save();
+    }
 
     return res.status(201).json({ payment: newPayment });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message || 'Failed to create daily payment' });
+    return res.status(500).json({ error: err.message || 'Failed to record daily payment' });
   }
 });
 
-// POST /api/v1/daily-payments/bulk (Batch upload)
-router.post('/bulk', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+// POST /api/v1/daily-payments/bulk
+router.post('/bulk', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user!.id;
-    const { items, date } = req.body;
+    const { date, items } = req.body;
 
-    if (!items || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ error: 'Array of payment items is required' });
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'Items array is required for bulk upload' });
     }
 
-    const defaultDate = date || getLocalDateString(new Date());
-    const nowTime = new Date().toTimeString().slice(0, 5);
-    const createdList: DailyPayment[] = [];
+    const now = new Date();
+    const createdPayments: DailyPayment[] = [];
 
     for (const item of items) {
-      const parsedItemAmt = parseNumericAmount(item.amount);
-      if (parsedItemAmt <= 0 || !item.reason || !item.reason.trim()) continue;
+      const parsedAmt = parseNumericAmount(item.amount);
+      if (parsedAmt <= 0 || !item.reason || !item.reason.trim()) continue;
+
+      const pDate = item.date || date || getLocalDateString(now);
 
       const p: DailyPayment = {
-        id: uuidv4(),
+        id: item.id || uuidv4(),
         userId,
-        amount: parsedItemAmt,
+        amount: parsedAmt,
         reason: item.reason.trim(),
         paymentMethod: item.paymentMethod === 'Cash' ? 'Cash' : 'UPI',
         flow: item.flow === 'INCOMING' ? 'INCOMING' : 'OUTGOING',
-        date: item.date || defaultDate,
-        time: item.time || nowTime,
+        date: pDate,
+        time: item.time || now.toTimeString().slice(0, 5),
         category: item.category || 'Other',
-        notes: item.notes ? item.notes.trim() : undefined,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        notes: item.notes ? String(item.notes).trim() : undefined,
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
       };
-      createdList.push(p);
+      createdPayments.push(p);
     }
 
-    if (createdList.length === 0) {
-      return res.status(400).json({ error: 'No valid items found to create' });
+    if (createdPayments.length === 0) {
+      return res.status(400).json({ error: 'No valid payment entries found in bulk payload' });
     }
 
-    db.dailyPayments.push(...createdList);
-    db.save();
+    if (isMongoConnected()) {
+      await DailyPaymentModel.insertMany(createdPayments);
+    } else {
+      db.dailyPayments.push(...createdPayments);
+      db.save();
+    }
 
     return res.status(201).json({
-      message: `Successfully recorded ${createdList.length} daily transactions`,
-      payments: createdList,
+      message: `Successfully added ${createdPayments.length} daily payments`,
+      payments: createdPayments,
     });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message || 'Failed to bulk upload payments' });
+    return res.status(500).json({ error: err.message || 'Bulk upload failed' });
   }
 });
 
 // PUT /api/v1/daily-payments/:id
-router.put('/:id', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+router.put('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user!.id;
     const { id } = req.params;
-    const { amount, reason, paymentMethod, flow, date, time, category, notes } = req.body;
 
-    const idx = db.dailyPayments.findIndex(p => p.id === id && p.userId === userId);
-    if (idx === -1) {
-      return res.status(404).json({ error: 'Payment not found' });
+    if (isMongoConnected()) {
+      const existing = await DailyPaymentModel.findOne({ id, userId });
+      if (!existing) {
+        return res.status(404).json({ error: 'Daily payment record not found' });
+      }
+
+      const { amount, reason, paymentMethod, flow, date, category, notes } = req.body;
+      if (amount !== undefined) {
+        const parsedAmt = parseNumericAmount(amount);
+        if (parsedAmt <= 0) return res.status(400).json({ error: 'Valid amount is required' });
+        existing.amount = parsedAmt;
+      }
+      if (reason !== undefined) existing.reason = reason.trim();
+      if (paymentMethod !== undefined) existing.paymentMethod = paymentMethod;
+      if (flow !== undefined) existing.flow = flow;
+      if (date !== undefined) existing.date = date;
+      if (category !== undefined) existing.category = category;
+      if (notes !== undefined) existing.notes = notes;
+
+      await existing.save();
+      return res.json({ payment: existing });
+    } else {
+      const idx = db.dailyPayments.findIndex(p => p.id === id && p.userId === userId);
+      if (idx === -1) {
+        return res.status(404).json({ error: 'Daily payment record not found' });
+      }
+
+      const payment = db.dailyPayments[idx];
+      const { amount, reason, paymentMethod, flow, date, category, notes } = req.body;
+
+      if (amount !== undefined) {
+        const parsedAmt = parseNumericAmount(amount);
+        if (parsedAmt <= 0) return res.status(400).json({ error: 'Valid amount is required' });
+        payment.amount = parsedAmt;
+      }
+      if (reason !== undefined) payment.reason = reason.trim();
+      if (paymentMethod !== undefined) payment.paymentMethod = paymentMethod;
+      if (flow !== undefined) payment.flow = flow;
+      if (date !== undefined) payment.date = date;
+      if (category !== undefined) payment.category = category;
+      if (notes !== undefined) payment.notes = notes;
+
+      payment.updatedAt = new Date().toISOString();
+      db.save();
+
+      return res.json({ payment });
     }
-
-    const existing = db.dailyPayments[idx];
-    if (amount !== undefined) existing.amount = parseFloat(amount);
-    if (reason !== undefined) existing.reason = reason.trim();
-    if (paymentMethod !== undefined) existing.paymentMethod = paymentMethod === 'Cash' ? 'Cash' : 'UPI';
-    if (flow !== undefined) existing.flow = flow === 'INCOMING' ? 'INCOMING' : 'OUTGOING';
-    if (date !== undefined) existing.date = date;
-    if (time !== undefined) existing.time = time;
-    if (category !== undefined) existing.category = category;
-    if (notes !== undefined) existing.notes = notes;
-    existing.updatedAt = new Date().toISOString();
-
-    db.save();
-
-    return res.json({ payment: existing });
   } catch (err: any) {
     return res.status(500).json({ error: err.message || 'Failed to update daily payment' });
   }
 });
 
 // DELETE /api/v1/daily-payments/:id
-router.delete('/:id', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+router.delete('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user!.id;
     const { id } = req.params;
 
-    const idx = db.dailyPayments.findIndex(p => p.id === id && p.userId === userId);
-    if (idx === -1) {
-      return res.status(404).json({ error: 'Payment not found' });
+    if (isMongoConnected()) {
+      const result = await DailyPaymentModel.deleteOne({ id, userId });
+      if (result.deletedCount === 0) {
+        return res.status(404).json({ error: 'Daily payment record not found' });
+      }
+      return res.json({ message: 'Daily payment deleted successfully' });
+    } else {
+      const idx = db.dailyPayments.findIndex(p => p.id === id && p.userId === userId);
+      if (idx === -1) {
+        return res.status(404).json({ error: 'Daily payment record not found' });
+      }
+
+      db.dailyPayments.splice(idx, 1);
+      db.save();
+
+      return res.json({ message: 'Daily payment deleted successfully' });
     }
-
-    db.dailyPayments.splice(idx, 1);
-    db.save();
-
-    return res.json({ message: 'Daily payment deleted' });
   } catch (err: any) {
     return res.status(500).json({ error: err.message || 'Failed to delete daily payment' });
   }

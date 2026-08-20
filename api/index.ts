@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import { db } from '../server/services/db.js';
+import { connectMongo, isMongoConnected } from '../server/services/mongo.js';
 import { seedDemoData } from '../server/services/seed.js';
 
 import authRouter from '../server/routes/auth.js';
@@ -23,8 +24,9 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
-// Load db and seed demo data
+// Initialize DB & Connect Mongo if configured
 db.load();
+connectMongo().catch(err => console.warn('Mongo connection init warning:', err));
 seedDemoData();
 
 // API Routes
@@ -45,6 +47,7 @@ app.get('/api/v1/health', (req, res) => {
     status: 'online',
     appName: 'ABSOLUTE',
     platform: 'Vercel Serverless',
+    mongoConnected: isMongoConnected(),
     timestamp: new Date().toISOString(),
     smtpConfigured: Boolean(process.env.SMTP_USER || db.users.some(u => u.preferences?.smtpUser)),
   });
