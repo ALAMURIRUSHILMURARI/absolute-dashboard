@@ -229,7 +229,7 @@ export const DailyPaymentsPage: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const [dateScope, setDateScope] = useState<'SELECTED' | 'ALL'>('ALL');
+  const [dateScope, setDateScope] = useState<'SELECTED' | 'ALL'>('SELECTED');
 
   const handlePrevDay = () => {
     const parts = selectedDate.split('-').map(Number);
@@ -243,7 +243,7 @@ export const DailyPaymentsPage: React.FC = () => {
     setSelectedDate(getLocalDateString(d));
   };
 
-  // Filter payments (default ALL shows entire payment history so no entries are hidden)
+  // Filter payments strictly by selectedDate when dateScope === 'SELECTED'
   const filteredPayments = payments.filter(p => {
     if (dateScope === 'SELECTED' && p.date !== selectedDate) return false;
 
@@ -833,16 +833,6 @@ export const DailyPaymentsPage: React.FC = () => {
                 {/* Date Scope Pills */}
                 <div className="p-1 rounded-xl bg-[#1D1B1A] border border-[#FAF6F0]/10 flex items-center gap-1 ml-2">
                   <button
-                    onClick={() => setDateScope('ALL')}
-                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${
-                      dateScope === 'ALL'
-                        ? 'bg-[#3AB4B9] text-[#0A0A0A] shadow-sm'
-                        : 'text-[#A49690] hover:text-[#FAF6F0]'
-                    }`}
-                  >
-                    All History ({payments.length})
-                  </button>
-                  <button
                     onClick={() => setDateScope('SELECTED')}
                     className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${
                       dateScope === 'SELECTED'
@@ -850,7 +840,17 @@ export const DailyPaymentsPage: React.FC = () => {
                         : 'text-[#A49690] hover:text-[#FAF6F0]'
                     }`}
                   >
-                    Only {selectedDate}
+                    Only {selectedDate} ({selectedDatePayments.length})
+                  </button>
+                  <button
+                    onClick={() => setDateScope('ALL')}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${
+                      dateScope === 'ALL'
+                        ? 'bg-[#3AB4B9] text-[#0A0A0A] shadow-sm'
+                        : 'text-[#A49690] hover:text-[#FAF6F0]'
+                    }`}
+                  >
+                    All Dates ({payments.length})
                   </button>
                 </div>
               </div>
@@ -909,12 +909,39 @@ export const DailyPaymentsPage: React.FC = () => {
             {loading ? (
               <div className="py-16 text-center text-xs text-[#A49690]">Loading cashflow log...</div>
             ) : filteredPayments.length === 0 ? (
-              <div className="py-16 text-center">
-                <WalletCards className="w-12 h-12 text-[#A49690]/40 mx-auto mb-3" />
-                <h4 className="text-sm font-bold text-[#FAF6F0]">No payments recorded in this view</h4>
-                <p className="text-xs text-[#A49690] mt-1 max-w-xs mx-auto">
-                  Record your incoming income or outgoing expenses on the left to populate the log.
-                </p>
+              <div className="py-12 text-center space-y-3">
+                <WalletCards className="w-10 h-10 text-[#A49690]/40 mx-auto" />
+                <div>
+                  <h4 className="text-sm font-bold text-[#FAF6F0]">
+                    {dateScope === 'SELECTED'
+                      ? `No payments recorded for ${selectedDate}`
+                      : 'No payments found'}
+                  </h4>
+                  <p className="text-xs text-[#A49690] mt-1 max-w-xs mx-auto">
+                    {dateScope === 'SELECTED' && payments.length > 0
+                      ? `You have ${payments.length} payment${payments.length === 1 ? '' : 's'} recorded on other dates.`
+                      : 'Record your incoming income or outgoing expenses on the left to populate the log.'}
+                  </p>
+                </div>
+
+                {dateScope === 'SELECTED' && payments.length > 0 && (
+                  <div className="flex items-center justify-center gap-2 pt-1">
+                    <button
+                      onClick={() => setDateScope('ALL')}
+                      className="px-4 py-2 rounded-xl bg-[#3AB4B9]/15 hover:bg-[#3AB4B9]/25 border border-[#3AB4B9]/40 text-[#3AB4B9] text-xs font-bold transition-all"
+                    >
+                      View All Dates ({payments.length})
+                    </button>
+                    {payments[0]?.date && (
+                      <button
+                        onClick={() => setSelectedDate(payments[0].date)}
+                        className="px-4 py-2 rounded-xl bg-[#D36B4E]/15 hover:bg-[#D36B4E]/25 border border-[#D36B4E]/40 text-[#D36B4E] text-xs font-bold transition-all"
+                      >
+                        Jump to {payments[0].date}
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             ) : (
               <div className="space-y-3">
