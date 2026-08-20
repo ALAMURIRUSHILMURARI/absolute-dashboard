@@ -1,0 +1,145 @@
+{
+  "users": [
+    {
+      "id": "user_demo_absolute_01",
+      "name": "Rushil Murari",
+      "email": "demo@absolute.app",
+      "passwordHash": "$2a$10$L7Cz980Lv937l8efYhngCeKp9bF9yUm8M56rtDfFjBuvi3rTafgum",
+      "avatarUrl": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
+      "preferences": {
+        "theme": "dark",
+        "currency": "INR",
+        "soundEnabled": true,
+        "dueAlertsDaysBefore": 2,
+        "emailNotifications": true,
+        "alertEmail": "mail4murari27@gmail.com",
+        "smtpUser": "mail4murari27@gmail.com",
+        "smtpPass": "ovvt bctm pzmg tbyl",
+        "smtpHost": "smtp.gmail.com",
+        "smtpPort": 465
+      },
+      "createdAt": "2026-08-18T00:00:00.000Z",
+      "updatedAt": "2026-08-18T00:00:00.000Z"
+    }
+  ],
+  "people": [],
+  "transactions": [],
+  "dailyPayments": [
+    {
+      "id": "e202f8a6-84de-4255-8941-f1053fca7dd7",
+      "userId": "user_demo_absolute_01",
+      "amount": 189,
+      "reason": "uber bike",
+      "paymentMethod": "UPI",
+      "date": "2026-08-17",
+      "time": "11:58",
+      "category": "Travel & Fuel",
+      "createdAt": "2026-08-18T06:28:53.405Z",
+      "updatedAt": "2026-08-18T06:28:53.405Z"
+    },
+    {
+      "id": "abdcd1e7-43fe-4884-bee6-87fdc2540539",
+      "userId": "user_demo_absolute_01",
+      "amount": 84,
+      "reason": "uber bike",
+      "paymentMethod": "UPI",
+      "date": "2026-08-17",
+      "time": "11:59",
+      "category": "Travel & Fuel",
+      "createdAt": "2026-08-18T06:29:10.347Z",
+      "updatedAt": "2026-08-18T06:29:10.347Z"
+    },
+    {
+      "id": "ab5c7435-ee28-4039-b400-6185568423e5",
+      "userId": "user_demo_absolute_01",
+      "amount": 40,
+      "reason": "biryani and auto",
+      "paymentMethod": "UPI",
+      "flow": "OUTGOING",
+      "date": "2026-08-17",
+      "time": "12:05",
+      "category": "Food & Dining",
+      "createdAt": "2026-08-18T06:35:40.812Z",
+      "updatedAt": "2026-08-18T06:35:40.812Z"
+    },
+    {
+      "id": "40195fef-da3d-4564-9cf7-3970859c42e7",
+      "userId": "user_demo_absolute_01",
+      "amount": 210,
+      "reason": "food",
+      "paymentMethod": "UPI",
+      "flow": "INCOMING",
+      "date": "2026-08-17",
+      "time": "12:06",
+      "category": "Food & Dining",
+      "createdAt": "2026-08-18T06:36:52.747Z",
+      "updatedAt": "2026-08-18T06:36:52.747Z"
+    },
+    {
+      "id": "0c69ea19-2b12-4dd3-ade5-f53f0d904a8a",
+      "userId": "user_demo_absolute_01",
+      "amount": 210,
+      "reason": "food",
+      "paymentMethod": "UPI",
+      "flow": "OUTGOING",
+      "date": "2026-08-17",
+      "time": "12:07",
+      "category": "Food & Dining",
+      "createdAt": "2026-08-18T06:37:17.040Z",
+      "updatedAt": "2026-08-18T06:37:55.289Z"
+    },
+    {
+      "id": "2abffa49-cb95-4c03-a1a5-a0e3b59e6e95",
+      "userId": "user_demo_absolute_01",
+      "amount": 350,
+      "reason": "auto returns",
+      "paymentMethod": "Cash",
+      "flow": "OUTGOING",
+      "date": "2026-08-17",
+      "time": "12:08",
+      "category": "Travel & Fuel",
+      "createdAt": "2026-08-18T06:38:29.419Z",
+      "updatedAt": "2026-08-18T06:38:29.419Z"
+    }
+  ],
+  "schedules": [
+    {
+      "id": "ae97beb1-7f06-448a-816f-28bdc965f09b",
+      "userId": "user_demo_absolute_01",
+      "title": "bnp paribas exam",
+      "date": "2026-08-19",
+      "startTime": "20:00",
+      "endTime": "22:00",
+      "location": "mail",
+      "priority": "High",
+      "category": "College",
+      "reminder": "30_min",
+      "recurring": "None",
+      "isCompleted": false,
+      "createdAt": "2026-08-18T06:27:51.851Z",
+      "updatedAt": "2026-08-18T06:51:07.688Z",
+      "emailAlertSent": true,
+      "emailAlertSentAt": "2026-08-18T07:04:40.894Z"
+    },
+    {
+      "id": "0a0fbebc-9313-4f65-9aaf-a43a4a544f1e",
+      "userId": "user_demo_absolute_01",
+      "title": "capstone",
+      "date": "2026-08-18",
+      "startTime": "15:00",
+      "endTime": "16:00",
+      "location": "meet",
+      "priority": "Urgent",
+      "category": "Personal",
+      "reminder": "30_min",
+      "recurring": "None",
+      "isCompleted": false,
+      "createdAt": "2026-08-18T07:06:58.409Z",
+      "updatedAt": "2026-08-18T07:06:58.409Z",
+      "emailAlertSent": true,
+      "emailAlertSentAt": "2026-08-18T07:07:06.642Z"
+    }
+  ],
+  "reminders": [],
+  "notifications": []
+}
