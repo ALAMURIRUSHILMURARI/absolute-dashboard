@@ -229,7 +229,7 @@ export const DailyPaymentsPage: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const [dateScope, setDateScope] = useState<'SELECTED' | 'ALL'>('SELECTED');
+  const [dateScope, setDateScope] = useState<'SELECTED' | 'ALL'>('ALL');
 
   const handlePrevDay = () => {
     const parts = selectedDate.split('-').map(Number);
@@ -243,7 +243,7 @@ export const DailyPaymentsPage: React.FC = () => {
     setSelectedDate(getLocalDateString(d));
   };
 
-  // Group and filter payments strictly by selectedDate (when dateScope === 'SELECTED')
+  // Filter payments (default ALL shows entire payment history so no entries are hidden)
   const filteredPayments = payments.filter(p => {
     if (dateScope === 'SELECTED' && p.date !== selectedDate) return false;
 
@@ -833,24 +833,24 @@ export const DailyPaymentsPage: React.FC = () => {
                 {/* Date Scope Pills */}
                 <div className="p-1 rounded-xl bg-[#1D1B1A] border border-[#FAF6F0]/10 flex items-center gap-1 ml-2">
                   <button
+                    onClick={() => setDateScope('ALL')}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${
+                      dateScope === 'ALL'
+                        ? 'bg-[#3AB4B9] text-[#0A0A0A] shadow-sm'
+                        : 'text-[#A49690] hover:text-[#FAF6F0]'
+                    }`}
+                  >
+                    All History ({payments.length})
+                  </button>
+                  <button
                     onClick={() => setDateScope('SELECTED')}
                     className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${
                       dateScope === 'SELECTED'
-                        ? 'bg-[#3AB4B9] text-[#0A0A0A]'
+                        ? 'bg-[#D36B4E] text-[#FAF6F0] shadow-sm'
                         : 'text-[#A49690] hover:text-[#FAF6F0]'
                     }`}
                   >
                     Only {selectedDate}
-                  </button>
-                  <button
-                    onClick={() => setDateScope('ALL')}
-                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${
-                      dateScope === 'ALL'
-                        ? 'bg-[#D36B4E] text-[#FAF6F0]'
-                        : 'text-[#A49690] hover:text-[#FAF6F0]'
-                    }`}
-                  >
-                    All History
                   </button>
                 </div>
               </div>
