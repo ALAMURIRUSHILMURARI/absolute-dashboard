@@ -16,7 +16,7 @@ export const connectMongo = async (): Promise<boolean> => {
   const uri = process.env.MONGODB_URI;
 
   if (!uri) {
-    console.log('ℹ️ [MongoDB] MONGODB_URI not configured in .env. Operating with JsonDB fallback mode.');
+    console.log('ℹ️ [MongoDB] MONGODB_URI not configured in environment. JsonDB fallback active.');
     return false;
   }
 
@@ -27,17 +27,17 @@ export const connectMongo = async (): Promise<boolean> => {
   try {
     await mongoose.connect(uri, {
       bufferCommands: false,
-      serverSelectionTimeoutMS: 5000,
+      serverSelectionTimeoutMS: 3000,
     });
     isConnected = true;
     console.log('🍃 [MongoDB] Connected to Cloud Database successfully!');
 
     // Trigger auto-migration from JsonDB to MongoDB if collections are empty
-    await autoMigrateFromJsonDB();
+    autoMigrateFromJsonDB().catch(e => console.warn('Migration warning:', e));
     return true;
   } catch (err: any) {
-    console.error('❌ [MongoDB] Connection error:', err.message);
-    console.log('🔄 [MongoDB] Falling back seamlessly to JsonDB engine.');
+    console.error('❌ [MongoDB] Connection warning:', err.message);
+    console.log('🔄 [MongoDB] JsonDB fallback active.');
     return false;
   }
 };
