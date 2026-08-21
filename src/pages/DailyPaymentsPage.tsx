@@ -273,18 +273,23 @@ export const DailyPaymentsPage: React.FC = () => {
 
   const sortedDates = Object.keys(groupedPaymentsMap).sort((a, b) => b.localeCompare(a));
 
-  // Calculate stats for the currently selected date
-  const selectedDatePayments = payments.filter(p => p.date === selectedDate);
-  const selectedDateOutgoing = selectedDatePayments
+  const selectedDateCount = payments.filter(p => p.date === selectedDate).length;
+
+  // Calculate stats dynamically based on active dateScope (ALL vs SELECTED)
+  const activeCalcPayments = dateScope === 'ALL'
+    ? payments
+    : payments.filter(p => p.date === selectedDate);
+
+  const selectedDateOutgoing = activeCalcPayments
     .filter(p => (p.flow || 'OUTGOING') === 'OUTGOING')
     .reduce((acc, p) => acc + p.amount, 0);
-  const selectedDateIncoming = selectedDatePayments
+  const selectedDateIncoming = activeCalcPayments
     .filter(p => p.flow === 'INCOMING')
     .reduce((acc, p) => acc + p.amount, 0);
   const selectedDateNet = selectedDateIncoming - selectedDateOutgoing;
 
-  const selectedDateUpi = selectedDatePayments.filter(p => p.paymentMethod === 'UPI').reduce((acc, p) => acc + p.amount, 0);
-  const selectedDateCash = selectedDatePayments.filter(p => p.paymentMethod === 'Cash').reduce((acc, p) => acc + p.amount, 0);
+  const selectedDateUpi = activeCalcPayments.filter(p => p.paymentMethod === 'UPI').reduce((acc, p) => acc + p.amount, 0);
+  const selectedDateCash = activeCalcPayments.filter(p => p.paymentMethod === 'Cash').reduce((acc, p) => acc + p.amount, 0);
 
   // Formatted date string for header
   const formattedSelectedDate = new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', {
@@ -382,7 +387,7 @@ export const DailyPaymentsPage: React.FC = () => {
             - {formatMoney(selectedDateOutgoing)}
           </p>
           <p className="text-[11px] text-[#A49690] mt-1 font-medium">
-            Daily expenses on {selectedDate === todayStr ? 'Today' : selectedDate}
+            {dateScope === 'ALL' ? 'Total expenses across All Dates' : `Daily expenses on ${selectedDate === todayStr ? 'Today' : selectedDate}`}
           </p>
         </div>
 
@@ -401,7 +406,7 @@ export const DailyPaymentsPage: React.FC = () => {
             + {formatMoney(selectedDateIncoming)}
           </p>
           <p className="text-[11px] text-[#A49690] mt-1 font-medium">
-            Daily inflows / earnings
+            {dateScope === 'ALL' ? 'Total inflows across All Dates' : `Daily inflows on ${selectedDate === todayStr ? 'Today' : selectedDate}`}
           </p>
         </div>
 
@@ -410,7 +415,7 @@ export const DailyPaymentsPage: React.FC = () => {
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-bold uppercase tracking-widest text-[#A49690] flex items-center gap-1.5">
               <TrendingUp className="w-3.5 h-3.5 text-[#FAF6F0]" />
-              Net Daily Cashflow
+              {dateScope === 'ALL' ? 'Net Cashflow (All)' : 'Net Daily Cashflow'}
             </span>
             <span className="px-2 py-0.5 text-[9px] font-bold rounded bg-[#1D1B1A] text-[#FAF6F0] border border-[#FAF6F0]/10 uppercase">
               In - Out
@@ -424,7 +429,7 @@ export const DailyPaymentsPage: React.FC = () => {
             {selectedDateNet > 0 ? `+ ${formatMoney(selectedDateNet)}` : selectedDateNet < 0 ? `- ${formatMoney(Math.abs(selectedDateNet))}` : '₹0.00'}
           </p>
           <p className="text-[11px] text-[#A49690] mt-1">
-            {selectedDateNet >= 0 ? 'Positive net flow' : 'Deficit outflow'}
+            {dateScope === 'ALL' ? 'Combined net balance' : selectedDateNet >= 0 ? 'Positive net flow' : 'Deficit outflow'}
           </p>
         </div>
 
@@ -856,7 +861,7 @@ export const DailyPaymentsPage: React.FC = () => {
                         : 'text-[#A49690] hover:text-[#FAF6F0]'
                     }`}
                   >
-                    Only {selectedDate} ({selectedDatePayments.length})
+                    Only {selectedDate} ({selectedDateCount})
                   </button>
                   <button
                     onClick={() => setDateScope('ALL')}
