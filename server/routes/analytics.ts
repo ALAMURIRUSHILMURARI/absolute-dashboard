@@ -1,20 +1,27 @@
 import { Router, Response } from 'express';
-import { db } from '../services/db.js';
 import { authMiddleware, AuthenticatedRequest } from '../middleware/auth.js';
-import { getFinancialOverview, getAllPeopleSummaries } from '../services/ledger.js';
+import { getFinancialOverviewAsync, getAllPeopleSummariesAsync, fetchUserTransactions } from '../services/ledger.js';
+import { isMongoConnected } from '../services/mongo.js';
+import { ScheduleModel } from '../models/mongooseSchemas.js';
+import { db } from '../services/db.js';
 
 const router = Router();
 
 // GET /api/v1/analytics
-router.get('/', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+router.get('/', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user!.id;
 
-    const overview = getFinancialOverview(userId);
-    const peopleSummaries = getAllPeopleSummaries(userId);
+    const overview = await getFinancialOverviewAsync(userId);
+    const peopleSummaries = await getAllPeopleSummariesAsync(userId);
+    const userTxs = await fetchUserTransactions(userId);
 
-    const userTxs = db.transactions.filter(t => t.userId === userId);
-    const userSchedules = db.schedules.filter(s => s.userId === userId);
+    let userSchedules: any[] = [];
+    if (isMongoConnected()) {
+      userSchedules = await ScheduleModel.find({ userId }).lean();
+    } else {
+      userSchedules = db.schedules.filter(s => s.userId === userId);
+    }
 
     // Monthly flow breakdown (Past 6 months)
     const monthlyMap: { [key: string]: { month: string; moneyIn: number; moneyOut: number; count: number } } = {};
@@ -42,7 +49,7 @@ router.get('/', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
 
     const monthlyTrends = Object.values(monthlyMap);
 
-    // Active tabs (Sorted by absolute net balance or transaction volume)
+    // Active tabs
     const activeTabs = [...peopleSummaries]
       .sort((a, b) => (Math.abs(b.netBalance) + b.totalTransactionsCount * 100) - (Math.abs(a.netBalance) + a.totalTransactionsCount * 100))
       .slice(0, 5)
@@ -57,7 +64,7 @@ router.get('/', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
         transactionsCount: p.totalTransactionsCount,
       }));
 
-    // Status breakdown (Settled vs Pending vs Partial vs Overdue)
+    // Status breakdown
     let settledCount = 0;
     let pendingCount = 0;
     let partialCount = 0;

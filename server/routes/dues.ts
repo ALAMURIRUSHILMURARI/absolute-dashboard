@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
-import { db } from '../services/db.js';
 import { authMiddleware, AuthenticatedRequest } from '../middleware/auth.js';
 import { Transaction } from '../models/types.js';
+import { fetchUserPeople, fetchUserTransactions } from '../services/ledger.js';
 
 const router = Router();
 
@@ -15,20 +15,17 @@ export interface DueItem {
 }
 
 // GET /api/v1/dues
-router.get('/', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+router.get('/', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user!.id;
     const { filter, sortBy } = req.query; // filter: all, due_soon, due_today, overdue, settled
 
-    const userPeopleMap = new Map(
-      db.people.filter(p => p.userId === userId).map(p => [p.id, p])
-    );
+    const people = await fetchUserPeople(userId);
+    const userPeopleMap = new Map(people.map(p => [p.id, p]));
 
-    const userTxs = db.transactions.filter(t => t.userId === userId);
+    const userTxs = await fetchUserTransactions(userId);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-
-    const todayStr = today.toISOString().split('T')[0];
 
     const mapDueItem = (tx: Transaction): DueItem => {
       const person = userPeopleMap.get(tx.personId);
