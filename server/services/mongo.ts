@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import dns from 'dns';
 import { db } from './db.js';
 import {
   UserModel,
@@ -9,6 +10,13 @@ import {
   PersonModel,
   NotificationItemModel,
 } from '../models/mongooseSchemas.js';
+
+// Ensure Windows Node.js can resolve MongoDB Atlas SRV records
+try {
+  dns.setServers(['8.8.8.8', '1.1.1.1']);
+} catch (e) {
+  console.warn('DNS server config notice:', e);
+}
 
 let isConnected = false;
 
@@ -27,7 +35,7 @@ export const connectMongo = async (): Promise<boolean> => {
   try {
     await mongoose.connect(uri, {
       bufferCommands: false,
-      serverSelectionTimeoutMS: 3000,
+      serverSelectionTimeoutMS: 5000,
     });
     isConnected = true;
     console.log('🍃 [MongoDB] Connected to Cloud Database successfully!');
