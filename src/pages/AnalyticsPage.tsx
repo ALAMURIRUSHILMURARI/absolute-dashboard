@@ -138,7 +138,7 @@ export const AnalyticsPage: React.FC = () => {
                   />
                   <Legend
                     wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }}
-                    formatter={(val) => <span className="text-[#FAF6F0]">{val === 'moneyOut' ? 'Money Out (I Owed)' : 'Money In (They Owed)'}</span>}
+                    formatter={(val) => <span className="text-[#FAF6F0]">{val === 'moneyOut' ? 'Total Money Out (Daily Expenses + Debts Owed)' : 'Total Money In (Daily Income + Receivables)'}</span>}
                   />
                   <Bar dataKey="moneyOut" name="moneyOut" fill="#D36B4E" radius={[6, 6, 0, 0]} />
                   <Bar dataKey="moneyIn" name="moneyIn" fill="#3AB4B9" radius={[6, 6, 0, 0]} />

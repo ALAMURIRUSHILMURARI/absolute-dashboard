@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import { authMiddleware, AuthenticatedRequest } from '../middleware/auth.js';
 import { getFinancialOverviewAsync, getAllPeopleSummariesAsync, fetchUserTransactions } from '../services/ledger.js';
 import { isMongoConnected } from '../services/mongo.js';
-import { ScheduleModel } from '../models/mongooseSchemas.js';
+import { ScheduleModel, DailyPaymentModel } from '../models/mongooseSchemas.js';
 import { db } from '../services/db.js';
 
 const router = Router();
@@ -17,13 +17,17 @@ router.get('/', authMiddleware, async (req: AuthenticatedRequest, res: Response)
     const userTxs = await fetchUserTransactions(userId);
 
     let userSchedules: any[] = [];
+    let dailyPayments: any[] = [];
+
     if (isMongoConnected()) {
       userSchedules = await ScheduleModel.find({ userId }).lean();
+      dailyPayments = await DailyPaymentModel.find({ userId }).lean();
     } else {
       userSchedules = db.schedules.filter(s => s.userId === userId);
+      dailyPayments = db.dailyPayments.filter(dp => dp.userId === userId);
     }
 
-    // Monthly flow breakdown (Past 6 months)
+    // Monthly flow breakdown (Past 6 months) - includes BOTH ledger transactions and daily payments
     const monthlyMap: { [key: string]: { month: string; moneyIn: number; moneyOut: number; count: number } } = {};
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -35,14 +39,28 @@ router.get('/', authMiddleware, async (req: AuthenticatedRequest, res: Response)
       monthlyMap[key] = { month: label, moneyIn: 0, moneyOut: 0, count: 0 };
     }
 
+    // 1. Process People Ledger Transactions
     for (const tx of userTxs) {
-      const ym = tx.date.slice(0, 7);
+      const ym = tx.date ? tx.date.slice(0, 7) : '';
       if (monthlyMap[ym]) {
         monthlyMap[ym].count++;
         if (tx.direction === 'THEY_OWE_ME') {
           monthlyMap[ym].moneyIn += tx.amount;
         } else {
           monthlyMap[ym].moneyOut += tx.amount;
+        }
+      }
+    }
+
+    // 2. Process Daily Payments (Outgoings & Incomings)
+    for (const dp of dailyPayments) {
+      const ym = dp.date ? dp.date.slice(0, 7) : '';
+      if (monthlyMap[ym]) {
+        monthlyMap[ym].count++;
+        if (dp.flow === 'INCOMING') {
+          monthlyMap[ym].moneyIn += dp.amount;
+        } else {
+          monthlyMap[ym].moneyOut += dp.amount;
         }
       }
     }
