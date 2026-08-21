@@ -46,10 +46,17 @@ app.use((req, res, next) => {
   next();
 });
 
-// Initialize database & Connect MongoDB if URI is provided
-db.load();
-connectMongo().catch(err => console.warn('Mongo connection error:', err));
-seedDemoData();
+// Ensure Mongo is connected before handling API requests
+app.use(async (req, res, next) => {
+  if (process.env.MONGODB_URI && !isMongoConnected()) {
+    try {
+      await connectMongo();
+    } catch (e) {
+      console.warn('Mongo middleware warning:', e);
+    }
+  }
+  next();
+});
 
 // REST API v1 Routes
 app.use('/api/v1/auth', authRouter);

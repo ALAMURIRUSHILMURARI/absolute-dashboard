@@ -214,13 +214,16 @@ class ApiClient {
       const res = await this.request<{ payments: DailyPayment[]; totalCount: number }>(`/daily-payments${qs}`);
       const localVault = this.getLocalVaultPayments();
 
-      const serverIds = new Set(res.payments.map(p => p.id));
-      const serverContentKeys = new Set(res.payments.map(p => `${p.date}_${(p.reason || '').toLowerCase().trim()}_${p.amount}_${p.flow || 'OUTGOING'}`));
+      const serverPayments = res.payments || [];
+      const serverIds = new Set(serverPayments.map(p => p.id));
+      const serverContentKeys = new Set(serverPayments.map(p => `${p.date}_${(p.reason || '').toLowerCase().trim()}_${p.amount}_${p.flow || 'OUTGOING'}`));
 
       const missingLocalItems = localVault.filter(lp => {
         const key = `${lp.date}_${(lp.reason || '').toLowerCase().trim()}_${lp.amount}_${lp.flow || 'OUTGOING'}`;
         return !serverIds.has(lp.id) && !serverContentKeys.has(key);
       });
+
+      const combined = [...serverPayments, ...missingLocalItems];
 
       if (missingLocalItems.length > 0 && !params?.date && !params?.search) {
         // Auto sync missing items back to server preserving original ID
@@ -237,16 +240,13 @@ class ApiClient {
             notes: item.notes,
           })),
         }).catch(err => console.warn('Background sync warning:', err));
-
-        const combined = [...res.payments, ...missingLocalItems];
-        this.saveLocalVaultPayments(combined);
-        return { payments: combined, totalCount: combined.length };
-      } else {
-        if (!params?.date && !params?.search && res.payments.length > 0) {
-          this.saveLocalVaultPayments(res.payments);
-        }
-        return res;
       }
+
+      if (!params?.date && !params?.search && combined.length > 0) {
+        this.saveLocalVaultPayments(combined);
+      }
+
+      return { payments: combined, totalCount: combined.length };
     } catch (err) {
       // Server connection fallback: return local vault cached payments
       const localVault = this.getLocalVaultPayments();
