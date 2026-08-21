@@ -180,7 +180,20 @@ class ApiClient {
 
   private saveLocalVaultPayments(payments: DailyPayment[]) {
     try {
-      localStorage.setItem('ABSOLUTE_VAULT_PAYMENTS', JSON.stringify(payments));
+      const seenIds = new Set<string>();
+      const seenContentKeys = new Set<string>();
+      const deduped: DailyPayment[] = [];
+
+      for (const p of payments) {
+        if (!p || !p.id) continue;
+        const contentKey = `${p.date}_${(p.reason || '').toLowerCase().trim()}_${p.amount}_${p.flow || 'OUTGOING'}`;
+        if (!seenIds.has(p.id) && !seenContentKeys.has(contentKey)) {
+          seenIds.add(p.id);
+          seenContentKeys.add(contentKey);
+          deduped.push(p);
+        }
+      }
+      localStorage.setItem('ABSOLUTE_VAULT_PAYMENTS', JSON.stringify(deduped));
     } catch (e) {
       console.warn('Vault cache save warning:', e);
     }
@@ -201,14 +214,19 @@ class ApiClient {
       const res = await this.request<{ payments: DailyPayment[]; totalCount: number }>(`/daily-payments${qs}`);
       const localVault = this.getLocalVaultPayments();
 
-      // Check if localVault has items that are missing from server (e.g. Vercel serverless cold restart)
       const serverIds = new Set(res.payments.map(p => p.id));
-      const missingLocalItems = localVault.filter(lp => !serverIds.has(lp.id));
+      const serverContentKeys = new Set(res.payments.map(p => `${p.date}_${(p.reason || '').toLowerCase().trim()}_${p.amount}_${p.flow || 'OUTGOING'}`));
+
+      const missingLocalItems = localVault.filter(lp => {
+        const key = `${lp.date}_${(lp.reason || '').toLowerCase().trim()}_${lp.amount}_${lp.flow || 'OUTGOING'}`;
+        return !serverIds.has(lp.id) && !serverContentKeys.has(key);
+      });
 
       if (missingLocalItems.length > 0 && !params?.date && !params?.search) {
-        // Auto sync missing items back to server in background
+        // Auto sync missing items back to server preserving original ID
         this.bulkCreateDailyPayments({
           items: missingLocalItems.map(item => ({
+            id: item.id,
             amount: item.amount,
             reason: item.reason,
             flow: item.flow,

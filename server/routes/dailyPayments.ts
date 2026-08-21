@@ -272,16 +272,37 @@ router.post('/bulk', authMiddleware, async (req: AuthenticatedRequest, res: Resp
       return res.status(400).json({ error: 'No valid payment entries found in bulk payload' });
     }
 
+    const finalInserted: DailyPayment[] = [];
     if (isMongoConnected()) {
-      await DailyPaymentModel.insertMany(createdPayments);
+      for (const p of createdPayments) {
+        // Prevent duplicate insertion if an entry with same ID or content already exists
+        const exists = await DailyPaymentModel.findOne({
+          $or: [
+            { id: p.id },
+            { userId: p.userId, date: p.date, reason: p.reason, amount: p.amount, flow: p.flow },
+          ],
+        });
+        if (!exists) {
+          await DailyPaymentModel.create(p);
+          finalInserted.push(p);
+        }
+      }
     } else {
-      db.dailyPayments.push(...createdPayments);
+      for (const p of createdPayments) {
+        const exists = db.dailyPayments.some(
+          ep => ep.id === p.id || (ep.userId === p.userId && ep.date === p.date && ep.reason === p.reason && ep.amount === p.amount)
+        );
+        if (!exists) {
+          db.dailyPayments.push(p);
+          finalInserted.push(p);
+        }
+      }
       db.save();
     }
 
     return res.status(201).json({
-      message: `Successfully added ${createdPayments.length} daily payments`,
-      payments: createdPayments,
+      message: `Successfully processed daily payments`,
+      payments: finalInserted.length > 0 ? finalInserted : createdPayments,
     });
   } catch (err: any) {
     return res.status(500).json({ error: err.message || 'Bulk upload failed' });
@@ -352,23 +373,51 @@ router.delete('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Res
     const userId = req.user!.id;
     const { id } = req.params;
 
+    let deletedCount = 0;
+
     if (isMongoConnected()) {
-      const result = await DailyPaymentModel.deleteOne({ id, userId });
-      if (result.deletedCount === 0) {
-        return res.status(404).json({ error: 'Daily payment record not found' });
+      // Find target payment to delete all duplicate instances with same date, amount, reason
+      const target = await DailyPaymentModel.findOne({ id, userId });
+      if (target) {
+        const delRes = await DailyPaymentModel.deleteMany({
+          userId,
+          date: target.date,
+          amount: target.amount,
+          reason: target.reason,
+        });
+        deletedCount = delRes.deletedCount;
+      } else {
+        const delRes = await DailyPaymentModel.deleteMany({ id, userId });
+        deletedCount = delRes.deletedCount;
       }
-      return res.json({ message: 'Daily payment deleted successfully' });
-    } else {
-      const idx = db.dailyPayments.findIndex(p => p.id === id && p.userId === userId);
-      if (idx === -1) {
-        return res.status(404).json({ error: 'Daily payment record not found' });
-      }
-
-      db.dailyPayments.splice(idx, 1);
-      db.save();
-
-      return res.json({ message: 'Daily payment deleted successfully' });
     }
+
+    // Also remove from JsonDB memory
+    const targetJson = db.dailyPayments.find(p => p.id === id && p.userId === userId);
+    if (targetJson) {
+      const filtered = db.dailyPayments.filter(
+        p => !(p.userId === userId && p.date === targetJson.date && p.amount === targetJson.amount && p.reason === targetJson.reason)
+      );
+      db.dailyPayments.length = 0;
+      db.dailyPayments.push(...filtered);
+      db.save();
+      deletedCount += 1;
+    } else {
+      const beforeLen = db.dailyPayments.length;
+      const filtered = db.dailyPayments.filter(p => !(p.id === id && p.userId === userId));
+      if (filtered.length < beforeLen) {
+        db.dailyPayments.length = 0;
+        db.dailyPayments.push(...filtered);
+        db.save();
+        deletedCount += 1;
+      }
+    }
+
+    if (deletedCount === 0) {
+      return res.status(404).json({ error: 'Daily payment record not found' });
+    }
+
+    return res.json({ message: 'Daily payment deleted successfully' });
   } catch (err: any) {
     return res.status(500).json({ error: err.message || 'Failed to delete daily payment' });
   }
