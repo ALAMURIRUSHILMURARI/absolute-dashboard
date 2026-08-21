@@ -1,24 +1,52 @@
 import { Router, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../services/db.js';
+import { isMongoConnected } from '../services/mongo.js';
+import { ScheduleModel } from '../models/mongooseSchemas.js';
 import { Schedule } from '../models/types.js';
 import { authMiddleware, AuthenticatedRequest } from '../middleware/auth.js';
 
 const router = Router();
 
+const fetchUserSchedules = async (userId: string): Promise<Schedule[]> => {
+  if (isMongoConnected()) {
+    const docs = await ScheduleModel.find({ userId }).lean();
+    return docs.map(d => ({
+      id: d.id,
+      userId: d.userId,
+      title: d.title,
+      date: d.date,
+      startTime: d.startTime,
+      endTime: d.endTime,
+      location: d.location,
+      description: d.description,
+      priority: d.priority as any,
+      category: d.category as any,
+      reminder: d.reminder,
+      recurring: d.recurring as any,
+      isCompleted: d.isCompleted,
+      completedAt: d.completedAt,
+      emailAlertSent: d.emailAlertSent,
+      emailAlertSentAt: d.emailAlertSentAt,
+      createdAt: d.createdAt ? new Date(d.createdAt).toISOString() : new Date().toISOString(),
+      updatedAt: d.updatedAt ? new Date(d.updatedAt).toISOString() : new Date().toISOString(),
+    }));
+  }
+  return db.schedules.filter(s => s.userId === userId);
+};
+
 // GET /api/v1/schedules
-router.get('/', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+router.get('/', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user!.id;
     const { date, category, priority, month } = req.query;
 
-    let items = db.schedules.filter(s => s.userId === userId);
+    let items = await fetchUserSchedules(userId);
 
     if (date) {
       items = items.filter(s => s.date === date);
     }
     if (month) {
-      // month format: YYYY-MM
       items = items.filter(s => s.date.startsWith(month as string));
     }
     if (category) {
@@ -28,7 +56,6 @@ router.get('/', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
       items = items.filter(s => s.priority === priority);
     }
 
-    // Sort by date then startTime
     items.sort((a, b) => {
       const dateCmp = a.date.localeCompare(b.date);
       if (dateCmp !== 0) return dateCmp;
@@ -42,7 +69,7 @@ router.get('/', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
 });
 
 // POST /api/v1/schedules
-router.post('/', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+router.post('/', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user!.id;
     const {
@@ -62,6 +89,7 @@ router.post('/', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
       return res.status(400).json({ error: 'Title and date are required' });
     }
 
+    const now = new Date().toISOString();
     const newSchedule: Schedule = {
       id: uuidv4(),
       userId,
@@ -76,12 +104,16 @@ router.post('/', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
       reminder,
       recurring,
       isCompleted: false,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      createdAt: now,
+      updatedAt: now,
     };
 
-    db.schedules.push(newSchedule);
-    db.save();
+    if (isMongoConnected()) {
+      await ScheduleModel.create(newSchedule);
+    } else {
+      db.schedules.push(newSchedule);
+      db.save();
+    }
 
     return res.status(201).json({ schedule: newSchedule });
   } catch (err: any) {
@@ -90,7 +122,7 @@ router.post('/', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
 });
 
 // PUT /api/v1/schedules/:id
-router.put('/:id', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+router.put('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user!.id;
     const { id } = req.params;
@@ -108,55 +140,89 @@ router.put('/:id', authMiddleware, (req: AuthenticatedRequest, res: Response) =>
       isCompleted,
     } = req.body;
 
-    const idx = db.schedules.findIndex(s => s.id === id && s.userId === userId);
-    if (idx === -1) {
-      return res.status(404).json({ error: 'Schedule not found' });
+    if (isMongoConnected()) {
+      const existing = await ScheduleModel.findOne({ id, userId });
+      if (!existing) {
+        return res.status(404).json({ error: 'Schedule not found' });
+      }
+
+      if (title) existing.title = title.trim();
+      if (date) existing.date = date;
+      if (startTime) existing.startTime = startTime;
+      if (endTime) existing.endTime = endTime;
+      if (location !== undefined) existing.location = location ? location.trim() : undefined;
+      if (description !== undefined) existing.description = description ? description.trim() : undefined;
+      if (priority) existing.priority = priority;
+      if (category) existing.category = category;
+      if (reminder) existing.reminder = reminder;
+      if (recurring) existing.recurring = recurring;
+      if (isCompleted !== undefined) {
+        existing.isCompleted = isCompleted;
+        existing.completedAt = isCompleted ? new Date().toISOString() : undefined;
+      }
+
+      await existing.save();
+      return res.json({ schedule: existing });
+    } else {
+      const idx = db.schedules.findIndex(s => s.id === id && s.userId === userId);
+      if (idx === -1) {
+        return res.status(404).json({ error: 'Schedule not found' });
+      }
+
+      const sch = db.schedules[idx];
+      if (title) sch.title = title.trim();
+      if (date) sch.date = date;
+      if (startTime) sch.startTime = startTime;
+      if (endTime) sch.endTime = endTime;
+      if (location !== undefined) sch.location = location ? location.trim() : undefined;
+      if (description !== undefined) sch.description = description ? description.trim() : undefined;
+      if (priority) sch.priority = priority;
+      if (category) sch.category = category;
+      if (reminder) sch.reminder = reminder;
+      if (recurring) sch.recurring = recurring;
+      if (isCompleted !== undefined) {
+        sch.isCompleted = isCompleted;
+        sch.completedAt = isCompleted ? new Date().toISOString() : undefined;
+      }
+      sch.updatedAt = new Date().toISOString();
+
+      db.save();
+      return res.json({ schedule: sch });
     }
-
-    const sch = db.schedules[idx];
-    if (title) sch.title = title.trim();
-    if (date) sch.date = date;
-    if (startTime) sch.startTime = startTime;
-    if (endTime) sch.endTime = endTime;
-    if (location !== undefined) sch.location = location ? location.trim() : undefined;
-    if (description !== undefined) sch.description = description ? description.trim() : undefined;
-    if (priority) sch.priority = priority;
-    if (category) sch.category = category;
-    if (reminder) sch.reminder = reminder;
-    if (recurring) sch.recurring = recurring;
-    if (isCompleted !== undefined) {
-      sch.isCompleted = isCompleted;
-      sch.completedAt = isCompleted ? new Date().toISOString() : undefined;
-    }
-    sch.updatedAt = new Date().toISOString();
-
-    db.save();
-
-    return res.json({ schedule: sch });
   } catch (err: any) {
     return res.status(500).json({ error: err.message || 'Failed to update schedule' });
   }
 });
 
 // PATCH /api/v1/schedules/:id/toggle
-router.patch('/:id/toggle', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+router.patch('/:id/toggle', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user!.id;
     const { id } = req.params;
 
-    const idx = db.schedules.findIndex(s => s.id === id && s.userId === userId);
-    if (idx === -1) {
-      return res.status(404).json({ error: 'Schedule not found' });
+    if (isMongoConnected()) {
+      const existing = await ScheduleModel.findOne({ id, userId });
+      if (!existing) {
+        return res.status(404).json({ error: 'Schedule not found' });
+      }
+      existing.isCompleted = !existing.isCompleted;
+      existing.completedAt = existing.isCompleted ? new Date().toISOString() : undefined;
+      await existing.save();
+      return res.json({ schedule: existing });
+    } else {
+      const idx = db.schedules.findIndex(s => s.id === id && s.userId === userId);
+      if (idx === -1) {
+        return res.status(404).json({ error: 'Schedule not found' });
+      }
+
+      const sch = db.schedules[idx];
+      sch.isCompleted = !sch.isCompleted;
+      sch.completedAt = sch.isCompleted ? new Date().toISOString() : undefined;
+      sch.updatedAt = new Date().toISOString();
+
+      db.save();
+      return res.json({ schedule: sch });
     }
-
-    const sch = db.schedules[idx];
-    sch.isCompleted = !sch.isCompleted;
-    sch.completedAt = sch.isCompleted ? new Date().toISOString() : undefined;
-    sch.updatedAt = new Date().toISOString();
-
-    db.save();
-
-    return res.json({ schedule: sch });
   } catch (err: any) {
     return res.status(500).json({ error: err.message || 'Failed to toggle schedule' });
   }
@@ -168,7 +234,8 @@ router.post('/:id/send-email-alert', authMiddleware, async (req: AuthenticatedRe
     const userId = req.user!.id;
     const { id } = req.params;
 
-    const schedule = db.schedules.find(s => s.id === id && s.userId === userId);
+    const items = await fetchUserSchedules(userId);
+    const schedule = items.find(s => s.id === id);
     if (!schedule) {
       return res.status(404).json({ error: 'Schedule not found' });
     }
@@ -179,9 +246,19 @@ router.post('/:id/send-email-alert', authMiddleware, async (req: AuthenticatedRe
     const { emailService } = await import('../services/email.js');
     const result = await emailService.sendScheduleAlert(targetEmail, schedule);
 
-    schedule.emailAlertSent = true;
-    schedule.emailAlertSentAt = new Date().toISOString();
-    db.save();
+    if (isMongoConnected()) {
+      await ScheduleModel.updateOne(
+        { id, userId },
+        { emailAlertSent: true, emailAlertSentAt: new Date().toISOString() }
+      );
+    } else {
+      const sch = db.schedules.find(s => s.id === id && s.userId === userId);
+      if (sch) {
+        sch.emailAlertSent = true;
+        sch.emailAlertSentAt = new Date().toISOString();
+        db.save();
+      }
+    }
 
     return res.json({
       message: `Priority-styled alert email (${schedule.priority}) sent to ${targetEmail}`,
@@ -215,14 +292,13 @@ router.post('/test-priority-email', authMiddleware, async (req: AuthenticatedReq
 });
 
 // DELETE /api/v1/schedules/:id
-router.delete('/:id', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+router.delete('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user!.id;
     const { id } = req.params;
 
-    const exists = db.schedules.some(s => s.id === id && s.userId === userId);
-    if (!exists) {
-      return res.status(404).json({ error: 'Schedule not found' });
+    if (isMongoConnected()) {
+      await ScheduleModel.deleteOne({ id, userId });
     }
 
     const schedules = db.schedules.filter(s => !(s.id === id && s.userId === userId));
