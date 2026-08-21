@@ -96,7 +96,7 @@ export const AddPersonModal: React.FC<AddPersonModalProps> = ({ isOpen, onClose,
               type="text"
               value={name}
               onChange={e => setName(e.target.value)}
-              placeholder="e.g. Rahul Sharma, Srija Reddy"
+              placeholder="Full name"
               required
               className="w-full px-4 py-3 rounded-2xl bg-[#1D1B1A] border border-[#FAF6F0]/15 text-[#FAF6F0] text-xs focus:border-[#D36B4E] focus:outline-none"
             />
@@ -132,7 +132,7 @@ export const AddPersonModal: React.FC<AddPersonModalProps> = ({ isOpen, onClose,
                 type="tel"
                 value={phone}
                 onChange={e => setPhone(e.target.value)}
-                placeholder="+91 98765 43210"
+                placeholder="Phone number"
                 className="w-full px-4 py-2.5 rounded-2xl bg-[#1D1B1A] border border-[#FAF6F0]/15 text-[#FAF6F0] text-xs focus:border-[#D36B4E] focus:outline-none"
               />
             </div>
@@ -148,7 +148,7 @@ export const AddPersonModal: React.FC<AddPersonModalProps> = ({ isOpen, onClose,
               type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
-              placeholder="e.g. name@example.com"
+              placeholder="Email address"
               className="w-full px-4 py-2.5 rounded-2xl bg-[#1D1B1A] border border-[#FAF6F0]/15 text-[#FAF6F0] text-xs focus:border-[#D36B4E] focus:outline-none"
             />
           </div>
@@ -178,7 +178,7 @@ export const AddPersonModal: React.FC<AddPersonModalProps> = ({ isOpen, onClose,
               value={notes}
               onChange={e => setNotes(e.target.value)}
               rows={2}
-              placeholder="e.g. Roommate, split rent and groceries"
+              placeholder="Notes or context"
               className="w-full px-4 py-2.5 rounded-2xl bg-[#1D1B1A] border border-[#FAF6F0]/15 text-[#FAF6F0] text-xs focus:border-[#D36B4E] focus:outline-none"
             />
           </div>

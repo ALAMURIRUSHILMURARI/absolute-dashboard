@@ -109,7 +109,7 @@ export const AddReminderModal: React.FC<AddReminderModalProps> = ({ isOpen, onCl
               type="text"
               value={title}
               onChange={e => setTitle(e.target.value)}
-              placeholder="e.g. Pay rent, Study for exam"
+              placeholder="Reminder title or task"
               required
               className="w-full px-4 py-3 rounded-2xl bg-[#1D1B1A] border border-[#FAF6F0]/15 text-[#FAF6F0] text-xs focus:border-[#D36B4E] focus:outline-none"
             />
@@ -226,7 +226,7 @@ export const AddReminderModal: React.FC<AddReminderModalProps> = ({ isOpen, onCl
               value={notes}
               onChange={e => setNotes(e.target.value)}
               rows={2}
-              placeholder="Additional details..."
+              placeholder="Notes"
               className="w-full px-4 py-2.5 rounded-2xl bg-[#1D1B1A] border border-[#FAF6F0]/15 text-[#FAF6F0] text-xs focus:border-[#D36B4E] focus:outline-none"
             />
           </div>

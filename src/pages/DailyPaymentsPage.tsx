@@ -589,8 +589,8 @@ export const DailyPaymentsPage: React.FC = () => {
                     onChange={e => setReason(e.target.value)}
                     placeholder={
                       flow === 'INCOMING'
-                        ? 'e.g. Salary, Client project payout, Pocket money, Cash from friend'
-                        : 'e.g. Chai & breakfast, Auto fare, Groceries, Dinner split'
+                        ? 'Reason / Received from'
+                        : 'Reason / Payment description'
                     }
                     required
                     className="w-full px-4 py-3 rounded-2xl bg-[#1D1B1A] border border-[#FAF6F0]/15 text-[#FAF6F0] text-xs focus:border-[#D36B4E] focus:outline-none"
@@ -772,7 +772,7 @@ export const DailyPaymentsPage: React.FC = () => {
                           const val = e.target.value;
                           setBulkRows(prev => prev.map((r, i) => (i === idx ? { ...r, reason: val } : r)));
                         }}
-                        placeholder="Reason (e.g. Chai, Auto, Salary, Groceries)"
+                        placeholder="Reason / Description"
                         className="w-full px-3 py-2 rounded-xl bg-[#121212] border border-[#FAF6F0]/10 text-xs text-[#FAF6F0] focus:border-[#D36B4E] focus:outline-none"
                       />
                     </div>

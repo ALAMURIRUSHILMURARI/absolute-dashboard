@@ -61,7 +61,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
       return;
     }
     if (!description.trim()) {
-      setError('Please enter a description (e.g. Dinner, Coffee, Rent, Loan)');
+      setError('Please enter a description');
       return;
     }
 
@@ -235,7 +235,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
               type="text"
               value={description}
               onChange={e => setDescription(e.target.value)}
-              placeholder="e.g. Dinner bill split, Emergency loan, Coffee"
+              placeholder="Description"
               required
               className="w-full px-4 py-3 rounded-2xl bg-[#1D1B1A] border border-[#FAF6F0]/15 text-[#FAF6F0] text-xs focus:border-[#D36B4E] focus:outline-none"
             />
@@ -298,7 +298,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
               value={notes}
               onChange={e => setNotes(e.target.value)}
               rows={2}
-              placeholder="Additional notes or payment reference..."
+              placeholder="Notes"
               className="w-full px-4 py-2.5 rounded-2xl bg-[#1D1B1A] border border-[#FAF6F0]/15 text-[#FAF6F0] text-xs focus:border-[#D36B4E] focus:outline-none"
             />
           </div>

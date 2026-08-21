@@ -151,7 +151,7 @@ export const AddScheduleModal: React.FC<AddScheduleModalProps> = ({
               type="text"
               value={title}
               onChange={e => setTitle(e.target.value)}
-              placeholder="e.g. Capstone Review, Final Exam, Gym Workout"
+              placeholder="Schedule title"
               required
               className="w-full px-4 py-3 rounded-2xl bg-[#1D1B1A] border border-[#FAF6F0]/15 text-[#FAF6F0] text-xs focus:border-[#3AB4B9] focus:outline-none"
             />
@@ -252,7 +252,7 @@ export const AddScheduleModal: React.FC<AddScheduleModalProps> = ({
               type="text"
               value={location}
               onChange={e => setLocation(e.target.value)}
-              placeholder="e.g. Google Meet, Hall 302, Studio"
+              placeholder="Location or link"
               className="w-full px-4 py-3 rounded-2xl bg-[#1D1B1A] border border-[#FAF6F0]/15 text-[#FAF6F0] text-xs focus:border-[#3AB4B9] focus:outline-none"
             />
           </div>
@@ -304,7 +304,7 @@ export const AddScheduleModal: React.FC<AddScheduleModalProps> = ({
               value={description}
               onChange={e => setDescription(e.target.value)}
               rows={2}
-              placeholder="Additional agenda or preparation notes..."
+              placeholder="Notes or details"
               className="w-full px-4 py-2.5 rounded-2xl bg-[#1D1B1A] border border-[#FAF6F0]/15 text-[#FAF6F0] text-xs focus:border-[#3AB4B9] focus:outline-none"
             />
           </div>
