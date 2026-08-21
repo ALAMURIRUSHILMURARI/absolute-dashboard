@@ -96,8 +96,18 @@ export const DailyPaymentsPage: React.FC = () => {
         api.getDailyPayments(),
         api.getDailyPaymentsSummary(),
       ]);
-      setPayments(paymentsRes.payments);
+      const loadedPayments = paymentsRes.payments || [];
+      setPayments(loadedPayments);
       setSummary(summaryRes);
+
+      // Smart UX: If today has 0 payments, auto-select the latest date that actually has payments
+      if (loadedPayments.length > 0) {
+        const hasPaymentOnSelectedDate = loadedPayments.some(p => p.date === selectedDate);
+        if (!hasPaymentOnSelectedDate) {
+          const newestDate = [...loadedPayments].sort((a, b) => b.date.localeCompare(a.date))[0].date;
+          setSelectedDate(newestDate);
+        }
+      }
     } catch (err) {
       console.error('Failed to load daily payments:', err);
     } finally {
