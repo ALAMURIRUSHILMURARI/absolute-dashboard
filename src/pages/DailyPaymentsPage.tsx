@@ -207,13 +207,20 @@ export const DailyPaymentsPage: React.FC = () => {
     }
   };
 
-  const handleDeletePayment = async (id: string) => {
-    if (!window.confirm('Delete this payment entry?')) return;
+  const handleDeletePayment = async (p: DailyPayment) => {
+    if (!window.confirm(`Delete payment "${p.reason}" (${formatMoney(p.amount)})?`)) return;
+
+    // Optimistically update React state immediately for instant card removal
+    setPayments(prev =>
+      prev.filter(item => item.id !== p.id && !(item.date === p.date && item.reason === p.reason && item.amount === p.amount))
+    );
+
     try {
-      await api.deleteDailyPayment(id);
+      await api.deleteDailyPayment(p.id);
       fetchPayments();
     } catch (e) {
-      console.error(e);
+      console.error('Delete payment error:', e);
+      fetchPayments();
     }
   };
 
@@ -1058,7 +1065,7 @@ export const DailyPaymentsPage: React.FC = () => {
                                     <Edit2 className="w-3.5 h-3.5" />
                                   </button>
                                   <button
-                                    onClick={() => handleDeletePayment(p.id)}
+                                    onClick={() => handleDeletePayment(p)}
                                     className="p-1.5 text-[#A49690] hover:text-[#D36B4E] rounded-lg hover:bg-[#121212] transition-colors"
                                     title="Delete"
                                   >

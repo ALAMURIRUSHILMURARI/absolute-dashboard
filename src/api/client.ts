@@ -299,12 +299,27 @@ class ApiClient {
   }
 
   async deleteDailyPayment(id: string): Promise<{ message: string }> {
+    const currentVault = this.getLocalVaultPayments();
+    const target = currentVault.find(p => p.id === id);
+
+    if (target) {
+      const filtered = currentVault.filter(
+        p => !(p.id === id || (p.date === target.date && p.reason === target.reason && p.amount === target.amount))
+      );
+      try {
+        localStorage.setItem('ABSOLUTE_VAULT_PAYMENTS', JSON.stringify(filtered));
+      } catch (e) {}
+    } else {
+      const filtered = currentVault.filter(p => p.id !== id);
+      try {
+        localStorage.setItem('ABSOLUTE_VAULT_PAYMENTS', JSON.stringify(filtered));
+      } catch (e) {}
+    }
+
     const res = await this.request<{ message: string }>(`/daily-payments/${id}`, {
       method: 'DELETE',
     });
 
-    const currentVault = this.getLocalVaultPayments();
-    this.saveLocalVaultPayments(currentVault.filter(p => p.id !== id));
     return res;
   }
 
