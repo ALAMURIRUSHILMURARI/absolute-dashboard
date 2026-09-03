@@ -197,12 +197,38 @@ export const AnalyticsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Top Active Tabs Leaderboard */}
-      <div className="p-6 rounded-3xl bg-[#121212] border border-[#FAF6F0]/10 shadow-xl space-y-4">
-        <h3 className="text-xs font-bold text-[#FAF6F0] uppercase tracking-widest flex items-center gap-2">
-          <Users className="w-4 h-4 text-[#D36B4E]" />
-          <span>Top Active People Tabs</span>
-        </h3>
+      {/* Category Breakdown & Active Tabs Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Category Distribution Card */}
+        <div className="p-6 rounded-3xl bg-[#121212] border border-[#FAF6F0]/10 shadow-xl space-y-4">
+          <h3 className="text-xs font-bold text-[#FAF6F0] uppercase tracking-widest flex items-center gap-2">
+            <BarChart3 className="w-4 h-4 text-[#3AB4B9]" />
+            <span>Monthly Category Breakdown</span>
+          </h3>
+
+          {categoryBreakdown.length === 0 ? (
+            <div className="py-8 text-center text-xs text-[#A49690]">No category data logged</div>
+          ) : (
+            <div className="space-y-3">
+              {categoryBreakdown.map((item, idx) => (
+                <div key={item.category} className="flex items-center justify-between p-3 rounded-2xl bg-[#1D1B1A] border border-[#FAF6F0]/5">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
+                    <span className="text-xs font-bold text-[#FAF6F0]">{item.category}</span>
+                  </div>
+                  <span className="text-xs font-mono text-[#3AB4B9] font-bold">{item.count} items</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Top Active Tabs Leaderboard */}
+        <div className="p-6 rounded-3xl bg-[#121212] border border-[#FAF6F0]/10 shadow-xl space-y-4">
+          <h3 className="text-xs font-bold text-[#FAF6F0] uppercase tracking-widest flex items-center gap-2">
+            <Users className="w-4 h-4 text-[#D36B4E]" />
+            <span>Top Active People Tabs</span>
+          </h3>
 
         {(!data?.activeTabs || data.activeTabs.length === 0) ? (
           <div className="py-8 text-center text-xs text-[#A49690]">No active tabs found</div>
@@ -235,6 +261,7 @@ export const AnalyticsPage: React.FC = () => {
             ))}
           </div>
         )}
+        </div>
       </div>
     </div>
   );

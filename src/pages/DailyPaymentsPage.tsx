@@ -246,7 +246,13 @@ export const DailyPaymentsPage: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const [dateScope, setDateScope] = useState<'SELECTED' | 'ALL'>('ALL');
+  const [dateScope, setDateScope] = useState<'SELECTED' | 'MONTHLY' | 'ALL'>('MONTHLY');
+
+  const selectedMonthPrefix = selectedDate.slice(0, 7);
+  const selectedMonthLabel = new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', {
+    month: 'short',
+    year: 'numeric',
+  });
 
   const handlePrevDay = () => {
     const parts = selectedDate.split('-').map(Number);
@@ -260,9 +266,10 @@ export const DailyPaymentsPage: React.FC = () => {
     setSelectedDate(getLocalDateString(d));
   };
 
-  // Filter payments (either for selected date or all dates)
+  // Filter payments (either for selected date, month, or all dates)
   const filteredPayments = payments.filter(p => {
     if (dateScope === 'SELECTED' && p.date !== selectedDate) return false;
+    if (dateScope === 'MONTHLY' && !p.date.startsWith(selectedMonthPrefix)) return false;
 
     const matchesSearch =
       p.reason.toLowerCase().includes(search.toLowerCase()) ||
@@ -284,11 +291,15 @@ export const DailyPaymentsPage: React.FC = () => {
   const sortedDates = Object.keys(groupedPaymentsMap).sort((a, b) => b.localeCompare(a));
 
   const selectedDateCount = payments.filter(p => p.date === selectedDate).length;
+  const monthPaymentsCount = payments.filter(p => p.date.startsWith(selectedMonthPrefix)).length;
 
-  // Calculate stats dynamically based on active dateScope (ALL vs SELECTED)
-  const activeCalcPayments = dateScope === 'ALL'
-    ? payments
-    : payments.filter(p => p.date === selectedDate);
+  // Calculate stats dynamically based on active dateScope (ALL vs MONTHLY vs SELECTED)
+  const activeCalcPayments =
+    dateScope === 'ALL'
+      ? payments
+      : dateScope === 'MONTHLY'
+      ? payments.filter(p => p.date.startsWith(selectedMonthPrefix))
+      : payments.filter(p => p.date === selectedDate);
 
   const selectedDateOutgoing = activeCalcPayments
     .filter(p => (p.flow || 'OUTGOING') === 'OUTGOING')
@@ -300,6 +311,19 @@ export const DailyPaymentsPage: React.FC = () => {
 
   const selectedDateUpi = activeCalcPayments.filter(p => p.paymentMethod === 'UPI').reduce((acc, p) => acc + p.amount, 0);
   const selectedDateCash = activeCalcPayments.filter(p => p.paymentMethod === 'Cash').reduce((acc, p) => acc + p.amount, 0);
+
+  // Monthly Expense Category Breakdown calculation
+  const categoryBreakdownMap = activeCalcPayments
+    .filter(p => (p.flow || 'OUTGOING') === 'OUTGOING')
+    .reduce((acc, p) => {
+      const cat = p.category || 'Other';
+      acc[cat] = (acc[cat] || 0) + p.amount;
+      return acc;
+    }, {} as Record<string, number>);
+
+  const sortedCategoryExpenses = Object.entries(categoryBreakdownMap)
+    .map(([cat, amt]) => ({ category: cat, amount: amt }))
+    .sort((a, b) => b.amount - a.amount);
 
   // Formatted date string for header
   const formattedSelectedDate = new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', {
@@ -397,7 +421,7 @@ export const DailyPaymentsPage: React.FC = () => {
             - {formatMoney(selectedDateOutgoing)}
           </p>
           <p className="text-[11px] text-[#A49690] mt-1 font-medium">
-            {dateScope === 'ALL' ? 'Total expenses across All Dates' : `Daily expenses on ${selectedDate === todayStr ? 'Today' : selectedDate}`}
+            {dateScope === 'ALL' ? 'Total expenses across All Dates' : dateScope === 'MONTHLY' ? `Monthly expenses in ${selectedMonthLabel}` : `Daily expenses on ${selectedDate === todayStr ? 'Today' : selectedDate}`}
           </p>
         </div>
 
@@ -416,7 +440,7 @@ export const DailyPaymentsPage: React.FC = () => {
             + {formatMoney(selectedDateIncoming)}
           </p>
           <p className="text-[11px] text-[#A49690] mt-1 font-medium">
-            {dateScope === 'ALL' ? 'Total inflows across All Dates' : `Daily inflows on ${selectedDate === todayStr ? 'Today' : selectedDate}`}
+            {dateScope === 'ALL' ? 'Total inflows across All Dates' : dateScope === 'MONTHLY' ? `Monthly inflows in ${selectedMonthLabel}` : `Daily inflows on ${selectedDate === todayStr ? 'Today' : selectedDate}`}
           </p>
         </div>
 
@@ -425,7 +449,7 @@ export const DailyPaymentsPage: React.FC = () => {
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-bold uppercase tracking-widest text-[#A49690] flex items-center gap-1.5">
               <TrendingUp className="w-3.5 h-3.5 text-[#FAF6F0]" />
-              {dateScope === 'ALL' ? 'Net Cashflow (All)' : 'Net Daily Cashflow'}
+              {dateScope === 'ALL' ? 'Net Cashflow (All)' : dateScope === 'MONTHLY' ? `Net Cashflow (${selectedMonthLabel})` : 'Net Daily Cashflow'}
             </span>
             <span className="px-2 py-0.5 text-[9px] font-bold rounded bg-[#1D1B1A] text-[#FAF6F0] border border-[#FAF6F0]/10 uppercase">
               In - Out
@@ -439,7 +463,7 @@ export const DailyPaymentsPage: React.FC = () => {
             {selectedDateNet > 0 ? `+ ${formatMoney(selectedDateNet)}` : selectedDateNet < 0 ? `- ${formatMoney(Math.abs(selectedDateNet))}` : '₹0.00'}
           </p>
           <p className="text-[11px] text-[#A49690] mt-1">
-            {dateScope === 'ALL' ? 'Combined net balance' : selectedDateNet >= 0 ? 'Positive net flow' : 'Deficit outflow'}
+            {dateScope === 'ALL' ? 'Combined net balance' : dateScope === 'MONTHLY' ? `Monthly net for ${selectedMonthLabel}` : selectedDateNet >= 0 ? 'Positive net flow' : 'Deficit outflow'}
           </p>
         </div>
 
@@ -816,38 +840,47 @@ export const DailyPaymentsPage: React.FC = () => {
             )}
           </div>
 
-          {/* Monthly Totals Card */}
-          {summary && (
-            <div className="p-6 rounded-3xl bg-[#121212] border border-[#FAF6F0]/10 shadow-xl space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-[#A49690]">
-                  This Month Overview ({summary.month.month})
-                </span>
-                <span
-                  className={`font-mono text-xs font-bold ${
-                    summary.month.net >= 0 ? 'text-[#3AB4B9]' : 'text-[#D36B4E]'
-                  }`}
-                >
-                  Net: {summary.month.net >= 0 ? `+${formatMoney(summary.month.net)}` : `-${formatMoney(Math.abs(summary.month.net))}`}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 pt-2 border-t border-[#FAF6F0]/10">
-                <div>
-                  <span className="text-[#A49690] block text-[10px] uppercase font-bold">Total Inflow:</span>
-                  <span className="text-[#3AB4B9] font-mono font-bold text-sm">
-                    + {formatMoney(summary.month.incoming || 0)}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-[#A49690] block text-[10px] uppercase font-bold">Total Outflow:</span>
-                  <span className="text-[#D36B4E] font-mono font-bold text-sm">
-                    - {formatMoney(summary.month.outgoing || summary.month.total)}
-                  </span>
-                </div>
-              </div>
+          {/* Monthly Expense & Category Breakdown Card */}
+          <div className="p-6 rounded-3xl bg-[#121212] border border-[#FAF6F0]/10 shadow-xl space-y-4">
+            <div className="flex items-center justify-between border-b border-[#FAF6F0]/10 pb-3">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-[#FAF6F0] flex items-center gap-2">
+                <Coins className="w-4 h-4 text-[#D36B4E]" />
+                Monthly Expense Breakdown ({selectedMonthLabel})
+              </span>
+              <span
+                className={`font-mono text-xs font-bold ${
+                  selectedDateNet >= 0 ? 'text-[#3AB4B9]' : 'text-[#D36B4E]'
+                }`}
+              >
+                Net: {selectedDateNet >= 0 ? `+${formatMoney(selectedDateNet)}` : `-${formatMoney(Math.abs(selectedDateNet))}`}
+              </span>
             </div>
-          )}
+
+            {/* Category Expenses Progress */}
+            {sortedCategoryExpenses.length === 0 ? (
+              <p className="text-xs text-[#A49690] py-2 text-center">No outgoing expenses logged in {selectedMonthLabel}</p>
+            ) : (
+              <div className="space-y-2.5">
+                {sortedCategoryExpenses.slice(0, 5).map(item => {
+                  const percent = selectedDateOutgoing > 0 ? Math.round((item.amount / selectedDateOutgoing) * 100) : 0;
+                  return (
+                    <div key={item.category} className="space-y-1">
+                      <div className="flex items-center justify-between text-xs font-semibold">
+                        <span className="text-[#FAF6F0]">{item.category}</span>
+                        <span className="font-mono text-[#D36B4E] font-bold">{formatMoney(item.amount)} ({percent}%)</span>
+                      </div>
+                      <div className="w-full bg-[#1D1B1A] h-1.5 rounded-full overflow-hidden">
+                        <div
+                          className="bg-[#D36B4E] h-full rounded-full transition-all"
+                          style={{ width: `${percent}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* RIGHT: Timeline Log (7 cols) */}
@@ -872,6 +905,16 @@ export const DailyPaymentsPage: React.FC = () => {
                     }`}
                   >
                     Only {selectedDate} ({selectedDateCount})
+                  </button>
+                  <button
+                    onClick={() => setDateScope('MONTHLY')}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${
+                      dateScope === 'MONTHLY'
+                        ? 'bg-[#D36B4E] text-[#FAF6F0] shadow-sm'
+                        : 'text-[#A49690] hover:text-[#FAF6F0]'
+                    }`}
+                  >
+                    This Month ({selectedMonthLabel}) ({monthPaymentsCount})
                   </button>
                   <button
                     onClick={() => setDateScope('ALL')}
