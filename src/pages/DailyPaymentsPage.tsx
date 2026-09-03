@@ -246,7 +246,7 @@ export const DailyPaymentsPage: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const [dateScope, setDateScope] = useState<'SELECTED' | 'MONTHLY' | 'ALL'>('MONTHLY');
+  const [dateScope, setDateScope] = useState<'SELECTED' | 'MONTHLY' | 'ALL'>('ALL');
 
   const selectedMonthPrefix = selectedDate.slice(0, 7);
   const selectedMonthLabel = new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', {
