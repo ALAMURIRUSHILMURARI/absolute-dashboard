@@ -1,7 +1,16 @@
 import { Router, Response } from 'express';
 import { db } from '../services/db.js';
 import { authMiddleware, AuthenticatedRequest } from '../middleware/auth.js';
-import { seedDemoData } from '../services/seed.js';
+import { isMongoConnected } from '../services/mongo.js';
+import { userStore } from '../services/users.js';
+import {
+  DailyPaymentModel,
+  TransactionModel,
+  ScheduleModel,
+  ReminderModel,
+  PersonModel,
+  NotificationItemModel,
+} from '../models/mongooseSchemas.js';
 
 const router = Router();
 
@@ -10,7 +19,7 @@ router.get('/export', authMiddleware, (req: AuthenticatedRequest, res: Response)
   try {
     const userId = req.user!.id;
 
-    const user = db.users.find(u => u.id === userId);
+    const user = req.user;
     const people = db.people.filter(p => p.userId === userId);
     const transactions = db.transactions.filter(t => t.userId === userId);
     const dailyPayments = db.dailyPayments.filter(d => d.userId === userId);
@@ -96,12 +105,22 @@ router.post('/import', authMiddleware, (req: AuthenticatedRequest, res: Response
 });
 
 // POST /api/v1/settings/reset-demo
-router.post('/reset-demo', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+router.post('/reset-demo', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user!.id;
 
-    // Remove current user's records
-    const users = db.users.filter(u => u.id !== userId);
+    if (isMongoConnected()) {
+      await Promise.all([
+        DailyPaymentModel.deleteMany({ userId }),
+        TransactionModel.deleteMany({ userId }),
+        ScheduleModel.deleteMany({ userId }),
+        ReminderModel.deleteMany({ userId }),
+        PersonModel.deleteMany({ userId }),
+        NotificationItemModel.deleteMany({ userId }),
+      ]);
+    }
+
+    // Remove current user's records (the account itself is kept)
     const people = db.people.filter(p => p.userId !== userId);
     const transactions = db.transactions.filter(t => t.userId !== userId);
     const dailyPayments = db.dailyPayments.filter(d => d.userId !== userId);
@@ -109,8 +128,7 @@ router.post('/reset-demo', authMiddleware, (req: AuthenticatedRequest, res: Resp
     const reminders = db.reminders.filter(r => r.userId !== userId);
     const notifications = db.notifications.filter(n => n.userId !== userId);
 
-    db.replaceAll({ users, people, transactions, dailyPayments, schedules, reminders, notifications });
-    seedDemoData();
+    db.replaceAll({ people, transactions, dailyPayments, schedules, reminders, notifications });
 
     return res.json({ message: 'Reset to clean state completed' });
   } catch (err: any) {
@@ -143,16 +161,16 @@ router.post('/smtp', authMiddleware, async (req: AuthenticatedRequest, res: Resp
     }
 
     // Save to user preferences
-    const user = db.users.find(u => u.id === userId);
-    if (user) {
-      user.preferences.smtpUser = smtpUser.trim();
-      user.preferences.smtpPass = smtpPass.trim();
-      user.preferences.smtpHost = smtpHost.trim();
-      user.preferences.smtpPort = Number(smtpPort);
-      user.preferences.alertEmail = smtpUser.trim();
-      user.updatedAt = new Date().toISOString();
-      db.save();
-    }
+    await userStore.update(userId, {
+      preferences: {
+        ...req.user!.preferences,
+        smtpUser: smtpUser.trim(),
+        smtpPass: smtpPass.trim(),
+        smtpHost: smtpHost.trim(),
+        smtpPort: Number(smtpPort),
+        alertEmail: smtpUser.trim(),
+      },
+    });
 
     return res.json({
       message: 'SMTP credentials verified and saved successfully! Live email delivery active.',

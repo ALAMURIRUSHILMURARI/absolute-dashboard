@@ -240,8 +240,10 @@ router.post('/:id/send-email-alert', authMiddleware, async (req: AuthenticatedRe
       return res.status(404).json({ error: 'Schedule not found' });
     }
 
-    const user = db.users.find(u => u.id === userId);
-    const targetEmail = user?.preferences?.alertEmail || 'mail4murari27@gmail.com';
+    const targetEmail = req.user!.preferences?.alertEmail || req.user!.email;
+    if (!targetEmail) {
+      return res.status(400).json({ error: 'Set your alert email in Settings first' });
+    }
 
     const { emailService } = await import('../services/email.js');
     const result = await emailService.sendScheduleAlert(targetEmail, schedule);
@@ -275,8 +277,10 @@ router.post('/test-priority-email', authMiddleware, async (req: AuthenticatedReq
     const userId = req.user!.id;
     const { priority = 'Urgent', email } = req.body;
 
-    const user = db.users.find(u => u.id === userId);
-    const targetEmail = email || user?.preferences?.alertEmail || 'mail4murari27@gmail.com';
+    const targetEmail = email || req.user!.preferences?.alertEmail || req.user!.email;
+    if (!targetEmail) {
+      return res.status(400).json({ error: 'Enter an alert email first' });
+    }
 
     const { emailService } = await import('../services/email.js');
     const result = await emailService.sendTestEmail(targetEmail, priority);

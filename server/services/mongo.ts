@@ -40,8 +40,13 @@ export const connectMongo = async (): Promise<boolean> => {
     isConnected = true;
     console.log('🍃 [MongoDB] Connected to Cloud Database successfully!');
 
-    // Trigger auto-migration from JsonDB to MongoDB if collections are empty
-    autoMigrateFromJsonDB().catch(e => console.warn('Migration warning:', e));
+    // Accounts no longer require email; drop the old unique email index so ID-only signups don't collide
+    UserModel.collection.dropIndex('email_1').catch(() => {});
+
+    // Trigger auto-migration from JsonDB to MongoDB if collections are empty, then adopt orphaned records
+    autoMigrateFromJsonDB()
+      .then(adoptOrphanedRecords)
+      .catch(e => console.warn('Migration warning:', e));
     return true;
   } catch (err: any) {
     console.error('❌ [MongoDB] Connection warning:', err.message);
@@ -52,6 +57,28 @@ export const connectMongo = async (): Promise<boolean> => {
 
 export const isMongoConnected = (): boolean => {
   return isConnected && mongoose.connection.readyState === 1;
+};
+
+// Records whose owner account no longer exists (e.g. accounts that were kept only in an ephemeral JSON file)
+// are reassigned to the primary account (login ID 27). Records of existing users are never touched.
+const PRIMARY_USER_ID = 'user_demo_absolute_01';
+
+const adoptOrphanedRecords = async () => {
+  try {
+    const knownIds = new Set<string>([PRIMARY_USER_ID, ...db.users.map(u => u.id)]);
+    for (const u of await UserModel.find({}, { id: 1 }).lean()) knownIds.add((u as any).id);
+    const filter = { userId: { $nin: [...knownIds] } };
+
+    const models = [DailyPaymentModel, TransactionModel, ScheduleModel, ReminderModel, PersonModel, NotificationItemModel];
+    for (const model of models) {
+      const res = await model.updateMany(filter, { $set: { userId: PRIMARY_USER_ID } });
+      if (res.modifiedCount > 0) {
+        console.log(`🔗 [MongoDB] Reassigned ${res.modifiedCount} orphaned ${model.modelName} record(s) to the primary account.`);
+      }
+    }
+  } catch (err: any) {
+    console.error('⚠️ [MongoDB Orphan Adoption Warning]:', err.message);
+  }
 };
 
 // Auto-migrate records from db.json into MongoDB if MongoDB collections are newly created

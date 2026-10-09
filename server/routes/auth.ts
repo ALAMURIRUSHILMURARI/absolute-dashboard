@@ -1,16 +1,62 @@
-import { Router, Response } from 'express';
-import bcrypt from 'bcryptjs';
+import { Router, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../services/db.js';
+import { isMongoConnected } from '../services/mongo.js';
+import { userStore, isReservedLoginId } from '../services/users.js';
+import { seedDemoData } from '../services/seed.js';
+import {
+  DailyPaymentModel,
+  TransactionModel,
+  ScheduleModel,
+  ReminderModel,
+  PersonModel,
+  NotificationItemModel,
+} from '../models/mongooseSchemas.js';
 import { User } from '../models/types.js';
 import { authMiddleware, AuthenticatedRequest, JWT_SECRET } from '../middleware/auth.js';
-import { seedDemoData } from '../services/seed.js';
 
 const router = Router();
 
+const LOGIN_ID_PATTERN = /^\d+$/;
+const MAX_LOGIN_ID_LENGTH = 64;
+
+// Login has no password, so throttle failed attempts per client to make ID guessing impractical
+const FAIL_LIMIT = 8;
+const FAIL_WINDOW_MS = 15 * 60 * 1000;
+const failedAttempts = new Map<string, { count: number; resetAt: number }>();
+
+function clientKey(req: Request): string {
+  const forwarded = req.headers['x-forwarded-for'];
+  const ip = Array.isArray(forwarded) ? forwarded[0] : forwarded?.split(',')[0];
+  return (ip || req.ip || 'unknown').trim();
+}
+
+function isBlocked(key: string): boolean {
+  const entry = failedAttempts.get(key);
+  if (!entry) return false;
+  if (entry.resetAt <= Date.now()) {
+    failedAttempts.delete(key);
+    return false;
+  }
+  return entry.count >= FAIL_LIMIT;
+}
+
+function recordFailure(key: string) {
+  const entry = failedAttempts.get(key);
+  if (!entry || entry.resetAt <= Date.now()) {
+    failedAttempts.set(key, { count: 1, resetAt: Date.now() + FAIL_WINDOW_MS });
+  } else {
+    entry.count += 1;
+  }
+}
+
+function normalizeLoginId(raw: unknown): string {
+  return String(raw ?? '').trim();
+}
+
 function generateToken(user: User): string {
-  return jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '30d' });
+  return jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '30d' });
 }
 
 function sanitizeUser(user: User) {
@@ -21,25 +67,25 @@ function sanitizeUser(user: User) {
 // POST /api/v1/auth/signup
 router.post('/signup', async (req, res) => {
   try {
-    const { name, email, password, currency = 'INR' } = req.body;
+    const { name, currency = 'INR' } = req.body;
+    const loginId = normalizeLoginId(req.body.loginId);
 
-    if (!name || !email || !password) {
-      return res.status(400).json({ error: 'Name, email and password are required' });
+    if (!name || !String(name).trim() || !loginId) {
+      return res.status(400).json({ error: 'Name and user ID are required' });
+    }
+    if (!LOGIN_ID_PATTERN.test(loginId) || loginId.length > MAX_LOGIN_ID_LENGTH) {
+      return res.status(400).json({ error: 'User ID must contain digits only' });
     }
 
-    const normalizedEmail = email.trim().toLowerCase();
-    const existing = db.users.find(u => u.email.toLowerCase() === normalizedEmail);
-
-    if (existing) {
-      return res.status(400).json({ error: 'Email already registered' });
+    if (isReservedLoginId(loginId) || (await userStore.findByLoginId(loginId))) {
+      return res.status(400).json({ error: 'This user ID is already taken. Choose another one.' });
     }
 
-    const passwordHash = bcrypt.hashSync(password, 10);
+    const now = new Date().toISOString();
     const newUser: User = {
       id: uuidv4(),
-      name: name.trim(),
-      email: normalizedEmail,
-      passwordHash,
+      name: String(name).trim(),
+      loginId,
       preferences: {
         theme: 'dark',
         currency: currency || 'INR',
@@ -47,16 +93,18 @@ router.post('/signup', async (req, res) => {
         dueAlertsDaysBefore: 2,
         emailNotifications: true,
       },
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      createdAt: now,
+      updatedAt: now,
     };
 
-    db.users.push(newUser);
-    db.save();
+    await userStore.create(newUser);
 
     const token = generateToken(newUser);
     return res.status(201).json({ token, user: sanitizeUser(newUser) });
   } catch (err: any) {
+    if (err?.code === 11000) {
+      return res.status(400).json({ error: 'This user ID is already taken. Choose another one.' });
+    }
     return res.status(500).json({ error: err.message || 'Signup failed' });
   }
 });
@@ -64,24 +112,23 @@ router.post('/signup', async (req, res) => {
 // POST /api/v1/auth/login
 router.post('/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
-
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required' });
+    const key = clientKey(req);
+    if (isBlocked(key)) {
+      return res.status(429).json({ error: 'Too many failed attempts. Try again in 15 minutes.' });
     }
 
-    const normalizedEmail = email.trim().toLowerCase();
-    const user = db.users.find(u => u.email.toLowerCase() === normalizedEmail);
+    const loginId = normalizeLoginId(req.body.loginId);
+    if (!loginId) {
+      return res.status(400).json({ error: 'User ID is required' });
+    }
 
+    const user = LOGIN_ID_PATTERN.test(loginId) ? await userStore.findByLoginId(loginId) : undefined;
     if (!user) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+      recordFailure(key);
+      return res.status(401).json({ error: 'User ID not found' });
     }
 
-    const isValid = bcrypt.compareSync(password, user.passwordHash);
-    if (!isValid) {
-      return res.status(401).json({ error: 'Invalid email or password' });
-    }
-
+    failedAttempts.delete(key);
     const token = generateToken(user);
     return res.json({ token, user: sanitizeUser(user) });
   } catch (err: any) {
@@ -89,11 +136,11 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// POST /api/v1/auth/demo (1-click Demo Login)
+// POST /api/v1/auth/demo (1-click login for the existing demo account; unchanged behavior)
 router.post('/demo', async (_req, res) => {
   try {
     seedDemoData();
-    const demoUser = db.users.find(u => u.email === 'demo@absolute.app');
+    const demoUser = db.users.find(u => u.email === 'demo@absolute.app') || (await userStore.findById('user_demo_absolute_01'));
     if (!demoUser) {
       return res.status(500).json({ error: 'Demo user initialization failed' });
     }
@@ -110,47 +157,54 @@ router.get('/me', authMiddleware, (req: AuthenticatedRequest, res: Response) => 
 });
 
 // PUT /api/v1/auth/profile
-router.put('/profile', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+router.put('/profile', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const user = req.user!;
     const { name, avatarUrl, preferences } = req.body;
 
-    const userIdx = db.users.findIndex(u => u.id === user.id);
-    if (userIdx === -1) {
+    const patch: Partial<User> = {};
+    if (name) patch.name = String(name).trim();
+    if (avatarUrl !== undefined) patch.avatarUrl = avatarUrl;
+    if (preferences) {
+      patch.preferences = { ...user.preferences, ...preferences };
+    }
+
+    const updated = await userStore.update(user.id, patch);
+    if (!updated) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    if (name) db.users[userIdx].name = name.trim();
-    if (avatarUrl !== undefined) db.users[userIdx].avatarUrl = avatarUrl;
-    if (preferences) {
-      db.users[userIdx].preferences = {
-        ...db.users[userIdx].preferences,
-        ...preferences,
-      };
-    }
-    db.users[userIdx].updatedAt = new Date().toISOString();
-    db.save();
-
-    return res.json({ user: sanitizeUser(db.users[userIdx]) });
+    return res.json({ user: sanitizeUser(updated) });
   } catch (err: any) {
     return res.status(500).json({ error: err.message || 'Profile update failed' });
   }
 });
 
 // DELETE /api/v1/auth/account
-router.delete('/account', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+router.delete('/account', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user!.id;
 
-    // Filter out all records for this user
-    const users = db.users.filter(u => u.id !== userId);
-    const people = db.people.filter(p => p.userId !== userId);
-    const transactions = db.transactions.filter(t => t.userId !== userId);
-    const schedules = db.schedules.filter(s => s.userId !== userId);
-    const reminders = db.reminders.filter(r => r.userId !== userId);
-    const notifications = db.notifications.filter(n => n.userId !== userId);
+    if (isMongoConnected()) {
+      await Promise.all([
+        DailyPaymentModel.deleteMany({ userId }),
+        TransactionModel.deleteMany({ userId }),
+        ScheduleModel.deleteMany({ userId }),
+        ReminderModel.deleteMany({ userId }),
+        PersonModel.deleteMany({ userId }),
+        NotificationItemModel.deleteMany({ userId }),
+      ]);
+    }
 
-    db.replaceAll({ users, people, transactions, schedules, reminders, notifications });
+    await userStore.remove(userId);
+    db.replaceAll({
+      people: db.people.filter(p => p.userId !== userId),
+      transactions: db.transactions.filter(t => t.userId !== userId),
+      dailyPayments: db.dailyPayments.filter(d => d.userId !== userId),
+      schedules: db.schedules.filter(s => s.userId !== userId),
+      reminders: db.reminders.filter(r => r.userId !== userId),
+      notifications: db.notifications.filter(n => n.userId !== userId),
+    });
 
     return res.json({ message: 'Account and associated data deleted successfully' });
   } catch (err: any) {

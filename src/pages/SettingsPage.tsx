@@ -32,8 +32,8 @@ export const SettingsPage: React.FC = () => {
 
   const [name, setName] = useState(user?.name || '');
   const [avatarUrl, setAvatarUrl] = useState(user?.avatarUrl || '');
-  const [alertEmail, setAlertEmail] = useState(user?.preferences?.alertEmail || 'mail4murari27@gmail.com');
-  const [smtpUser, setSmtpUser] = useState(user?.preferences?.smtpUser || user?.preferences?.alertEmail || 'mail4murari27@gmail.com');
+  const [alertEmail, setAlertEmail] = useState(user?.preferences?.alertEmail || '');
+  const [smtpUser, setSmtpUser] = useState(user?.preferences?.smtpUser || user?.preferences?.alertEmail || '');
   const [smtpPass, setSmtpPass] = useState(user?.preferences?.smtpPass || '');
   const [showSmtpSetup, setShowSmtpSetup] = useState(!user?.preferences?.smtpPass);
 
@@ -437,10 +437,10 @@ export const SettingsPage: React.FC = () => {
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-[#A49690] uppercase tracking-widest">Email Address</label>
+              <label className="text-[10px] font-bold text-[#A49690] uppercase tracking-widest">User ID</label>
               <input
-                type="email"
-                value={user?.email || ''}
+                type="text"
+                value={user?.loginId || user?.email || ''}
                 disabled
                 className="w-full px-4 py-3 rounded-2xl bg-[#0A0A0A] border border-[#FAF6F0]/5 text-[#A49690] text-xs cursor-not-allowed"
               />

@@ -1,4 +1,5 @@
 import { db } from './db.js';
+import { userStore } from './users.js';
 import { emailService } from './email.js';
 import { v4 as uuidv4 } from 'uuid';
 import { NotificationItem } from '../models/types.js';
@@ -61,9 +62,10 @@ class ScheduleAlertWorker {
         }
 
         if (triggerAlert) {
-          const user = db.users.find(u => u.id === schedule.userId);
-          const targetEmail =
-            user?.preferences?.alertEmail || user?.email || 'mail4murari27@gmail.com';
+          const user = await userStore.findById(schedule.userId);
+          const targetEmail = user?.preferences?.alertEmail || user?.email;
+          // Users without an alert email get in-app notifications only
+          if (!targetEmail) continue;
 
           console.log(
             `🔔 [ScheduleAlertWorker] Triggering ${schedule.priority} priority alert for "${schedule.title}" (${diffMinutes}m remaining) to ${targetEmail}`

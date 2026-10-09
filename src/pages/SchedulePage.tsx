@@ -92,7 +92,7 @@ export const SchedulePage: React.FC = () => {
     try {
       setDispatchingId(schedule.id);
       const res = await api.sendScheduleEmailAlert(schedule.id);
-      setActionMsg(res.message || `Priority email alert (${schedule.priority}) sent for "${schedule.title}" to mail4murari27@gmail.com!`);
+      setActionMsg(res.message || `Priority email alert (${schedule.priority}) sent for "${schedule.title}" to your alert email!`);
       setTimeout(() => setActionMsg(''), 5000);
       fetchSchedules();
     } catch (err: any) {
@@ -223,7 +223,7 @@ export const SchedulePage: React.FC = () => {
             </span>
           </div>
           <p className="text-xs text-[#A49690] mt-1">
-            Manage your daily agenda, college commitments, exams, and receive 30-min priority email alerts at <b className="text-[#FAF6F0] font-mono">mail4murari27@gmail.com</b>.
+            Manage your daily agenda, college commitments, exams, and receive 30-min priority email alerts at the alert email set in Settings.
           </p>
         </div>
 

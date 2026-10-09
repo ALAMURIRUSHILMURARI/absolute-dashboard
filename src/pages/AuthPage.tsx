@@ -1,13 +1,12 @@
 import React, { useState } from 'react';
-import { Zap, ShieldCheck, ArrowRight, Sparkles, Lock, Mail, User as UserIcon } from 'lucide-react';
+import { Zap, ShieldCheck, ArrowRight, Sparkles, Hash, User as UserIcon } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export const AuthPage: React.FC = () => {
   const { login, signup, demoLogin } = useAuth();
   const [isLoginMode, setIsLoginMode] = useState(true);
   const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [loginId, setLoginId] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -18,9 +17,9 @@ export const AuthPage: React.FC = () => {
 
     try {
       if (isLoginMode) {
-        await login(email, password);
+        await login(loginId);
       } else {
-        await signup(name, email, password);
+        await signup(name, loginId);
       }
     } catch (err: any) {
       setError(err.message || 'Authentication failed');
@@ -119,7 +118,7 @@ export const AuthPage: React.FC = () => {
                   type="text"
                   value={name}
                   onChange={e => setName(e.target.value)}
-                  placeholder="Rushil Murari"
+                  placeholder="Your name"
                   required
                   className="w-full px-4 py-3 rounded-2xl bg-[#1D1B1A] border border-[#FAF6F0]/15 text-[#FAF6F0] text-xs focus:border-[#D36B4E] focus:outline-none"
                 />
@@ -128,32 +127,25 @@ export const AuthPage: React.FC = () => {
 
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold text-[#A49690] uppercase tracking-widest flex items-center gap-1.5">
-                <Mail className="w-3.5 h-3.5 text-[#A49690]" />
-                Email Address
+                <Hash className="w-3.5 h-3.5 text-[#A49690]" />
+                User ID
               </label>
               <input
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="you@example.com"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]+"
+                value={loginId}
+                onChange={e => setLoginId(e.target.value.replace(/\D/g, ''))}
+                placeholder="Digits only, e.g. 9876543210"
                 required
-                className="w-full px-4 py-3 rounded-2xl bg-[#1D1B1A] border border-[#FAF6F0]/15 text-[#FAF6F0] text-xs focus:border-[#D36B4E] focus:outline-none"
+                autoFocus
+                className="w-full px-4 py-3 rounded-2xl bg-[#1D1B1A] border border-[#FAF6F0]/15 text-[#FAF6F0] text-xs font-mono focus:border-[#D36B4E] focus:outline-none"
               />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-[#A49690] uppercase tracking-widest flex items-center gap-1.5">
-                <Lock className="w-3.5 h-3.5 text-[#A49690]" />
-                Password
-              </label>
-              <input
-                type="password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder="••••••••"
-                required
-                className="w-full px-4 py-3 rounded-2xl bg-[#1D1B1A] border border-[#FAF6F0]/15 text-[#FAF6F0] text-xs focus:border-[#D36B4E] focus:outline-none"
-              />
+              {!isLoginMode && (
+                <p className="text-[10px] text-[#A49690]">
+                  Remember this ID: it's the only thing you need to sign in.
+                </p>
+              )}
             </div>
 
             <button

@@ -144,7 +144,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               />
               <div className="min-w-0">
                 <p className="text-xs font-bold text-[#FAF6F0] truncate">{user?.name || 'User'}</p>
-                <p className="text-[10px] text-[#A49690] truncate">{user?.email}</p>
+                <p className="text-[10px] text-[#A49690] truncate">{user?.loginId ? `ID: ${user.loginId}` : user?.email}</p>
               </div>
             </div>
             <button

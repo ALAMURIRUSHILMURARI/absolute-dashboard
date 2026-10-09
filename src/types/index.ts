@@ -53,7 +53,8 @@ export interface UserPreferences {
 export interface User {
   id: string;
   name: string;
-  email: string;
+  loginId?: string;
+  email?: string;
   avatarUrl?: string;
   preferences: UserPreferences;
   createdAt: string;

@@ -53,8 +53,9 @@ export interface UserPreferences {
 export interface User {
   id: string;
   name: string;
-  email: string;
-  passwordHash: string;
+  loginId?: string; // numeric user ID used to sign in (digits only); absent on the legacy demo account
+  email?: string;
+  passwordHash?: string; // legacy accounts only
   avatarUrl?: string;
   preferences: UserPreferences;
   createdAt: string;

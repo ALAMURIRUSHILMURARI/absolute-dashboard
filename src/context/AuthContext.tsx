@@ -6,8 +6,8 @@ interface AuthContextType {
   user: User | null;
   token: string | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  signup: (name: string, email: string, password: string, currency?: string) => Promise<void>;
+  login: (loginId: string) => Promise<void>;
+  signup: (name: string, loginId: string, currency?: string) => Promise<void>;
   demoLogin: () => Promise<void>;
   logout: () => void;
   updateUser: (updated: User) => void;
@@ -43,15 +43,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     refreshUser();
   }, []);
 
-  const login = async (email: string, password: string) => {
-    const res = await api.login({ email, password });
+  const login = async (loginId: string) => {
+    const res = await api.login({ loginId });
     localStorage.setItem('absolute_token', res.token);
     setToken(res.token);
     setUser(res.user);
   };
 
-  const signup = async (name: string, email: string, password: string, currency?: string) => {
-    const res = await api.signup({ name, email, password, currency });
+  const signup = async (name: string, loginId: string, currency?: string) => {
+    const res = await api.signup({ name, loginId, currency });
     localStorage.setItem('absolute_token', res.token);
     setToken(res.token);
     setUser(res.user);

@@ -50,14 +50,14 @@ class ApiClient {
   }
 
   // Auth
-  async login(payload: { email: string; password: string }): Promise<{ token: string; user: User }> {
+  async login(payload: { loginId: string }): Promise<{ token: string; user: User }> {
     return this.request('/auth/login', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
   }
 
-  async signup(payload: { name: string; email: string; password: string; currency?: string }): Promise<{ token: string; user: User }> {
+  async signup(payload: { name: string; loginId: string; currency?: string }): Promise<{ token: string; user: User }> {
     return this.request('/auth/signup', {
       method: 'POST',
       body: JSON.stringify(payload),
@@ -169,9 +169,31 @@ class ApiClient {
     });
   }
 
+  // The offline vault is stored per user so one person's payments are never merged into another's account
+  private getVaultKey(): string | null {
+    try {
+      const token = this.getToken();
+      if (!token) return null;
+      const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+      return payload?.id ? `ABSOLUTE_VAULT_PAYMENTS_${payload.id}` : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
   private getLocalVaultPayments(): DailyPayment[] {
     try {
-      const stored = localStorage.getItem('ABSOLUTE_VAULT_PAYMENTS');
+      const key = this.getVaultKey();
+      if (!key) return [];
+
+      // One-time move of the old shared vault into the primary account (login ID 27); other users never inherit it
+      const legacy = localStorage.getItem('ABSOLUTE_VAULT_PAYMENTS');
+      if (legacy !== null && key === 'ABSOLUTE_VAULT_PAYMENTS_user_demo_absolute_01') {
+        if (localStorage.getItem(key) === null) localStorage.setItem(key, legacy);
+        localStorage.removeItem('ABSOLUTE_VAULT_PAYMENTS');
+      }
+
+      const stored = localStorage.getItem(key);
       return stored ? JSON.parse(stored) : [];
     } catch (e) {
       return [];
@@ -180,6 +202,8 @@ class ApiClient {
 
   private saveLocalVaultPayments(payments: DailyPayment[]) {
     try {
+      const key = this.getVaultKey();
+      if (!key) return;
       const seenIds = new Set<string>();
       const seenContentKeys = new Set<string>();
       const deduped: DailyPayment[] = [];
@@ -193,7 +217,7 @@ class ApiClient {
           deduped.push(p);
         }
       }
-      localStorage.setItem('ABSOLUTE_VAULT_PAYMENTS', JSON.stringify(deduped));
+      localStorage.setItem(key, JSON.stringify(deduped));
     } catch (e) {
       console.warn('Vault cache save warning:', e);
     }
@@ -303,17 +327,13 @@ class ApiClient {
     const target = currentVault.find(p => p.id === id);
 
     if (target) {
-      const filtered = currentVault.filter(
-        p => !(p.id === id || (p.date === target.date && p.reason === target.reason && p.amount === target.amount))
+      this.saveLocalVaultPayments(
+        currentVault.filter(
+          p => !(p.id === id || (p.date === target.date && p.reason === target.reason && p.amount === target.amount))
+        )
       );
-      try {
-        localStorage.setItem('ABSOLUTE_VAULT_PAYMENTS', JSON.stringify(filtered));
-      } catch (e) {}
     } else {
-      const filtered = currentVault.filter(p => p.id !== id);
-      try {
-        localStorage.setItem('ABSOLUTE_VAULT_PAYMENTS', JSON.stringify(filtered));
-      } catch (e) {}
+      this.saveLocalVaultPayments(currentVault.filter(p => p.id !== id));
     }
 
     const res = await this.request<{ message: string }>(`/daily-payments/${id}`, {
