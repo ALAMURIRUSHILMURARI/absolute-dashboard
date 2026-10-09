@@ -4,7 +4,6 @@ import { v4 as uuidv4 } from 'uuid';
 import { db } from '../services/db.js';
 import { isMongoConnected } from '../services/mongo.js';
 import { userStore, isReservedLoginId } from '../services/users.js';
-import { seedDemoData } from '../services/seed.js';
 import {
   DailyPaymentModel,
   TransactionModel,
@@ -133,21 +132,6 @@ router.post('/login', async (req, res) => {
     return res.json({ token, user: sanitizeUser(user) });
   } catch (err: any) {
     return res.status(500).json({ error: err.message || 'Login failed' });
-  }
-});
-
-// POST /api/v1/auth/demo (1-click login for the existing demo account; unchanged behavior)
-router.post('/demo', async (_req, res) => {
-  try {
-    seedDemoData();
-    const demoUser = db.users.find(u => u.email === 'demo@absolute.app') || (await userStore.findById('user_demo_absolute_01'));
-    if (!demoUser) {
-      return res.status(500).json({ error: 'Demo user initialization failed' });
-    }
-    const token = generateToken(demoUser);
-    return res.json({ token, user: sanitizeUser(demoUser) });
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message || 'Demo login failed' });
   }
 });
 

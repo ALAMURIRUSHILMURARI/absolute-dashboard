@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { Zap, ShieldCheck, ArrowRight, Sparkles, Hash, User as UserIcon } from 'lucide-react';
+import { Zap, ShieldCheck, Hash, User as UserIcon } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export const AuthPage: React.FC = () => {
-  const { login, signup, demoLogin } = useAuth();
+  const { login, signup } = useAuth();
   const [isLoginMode, setIsLoginMode] = useState(true);
   const [name, setName] = useState('');
   const [loginId, setLoginId] = useState('');
@@ -28,18 +28,6 @@ export const AuthPage: React.FC = () => {
     }
   };
 
-  const handleDemo = async () => {
-    setError('');
-    setLoading(true);
-    try {
-      await demoLogin();
-    } catch (err: any) {
-      setError(err.message || 'Demo login failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <div className="min-h-screen bg-[#0A0A0A] text-[#FAF6F0] flex flex-col justify-center items-center px-4 py-12 relative overflow-hidden">
       {/* Background ambient lighting */}
@@ -59,29 +47,6 @@ export const AuthPage: React.FC = () => {
           <p className="text-xs text-[#A49690] mt-1.5 max-w-xs mx-auto">
             Personal Command Center • Schedules, Money Tabs, Dues & Financial Ledger
           </p>
-        </div>
-
-        {/* 1-Click Demo Login Banner */}
-        <div className="mb-6 p-5 rounded-3xl bg-[#121212] border border-[#D36B4E]/30 shadow-2xl">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-1.5 text-xs font-bold text-[#D36B4E] uppercase tracking-wider">
-                <Sparkles className="w-4 h-4 text-[#D36B4E]" />
-                <span>Instant Sign In</span>
-              </div>
-              <p className="text-xs text-[#A49690] mt-1">
-                Enter your private vault with persistent real-time storage.
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={handleDemo}
-            disabled={loading}
-            className="mt-4 w-full py-3 px-4 rounded-2xl bg-[#D36B4E] hover:bg-[#E27B5E] active:scale-98 text-[#FAF6F0] font-bold text-xs uppercase tracking-wider shadow-lg shadow-[#D36B4E]/30 transition-all flex items-center justify-center gap-2"
-          >
-            <span>Enter Vault (1-Click)</span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
         </div>
 
         {/* Form Box */}

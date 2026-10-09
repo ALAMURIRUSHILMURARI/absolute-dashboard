@@ -64,12 +64,6 @@ class ApiClient {
     });
   }
 
-  async demoLogin(): Promise<{ token: string; user: User }> {
-    return this.request('/auth/demo', {
-      method: 'POST',
-    });
-  }
-
   async getMe(): Promise<{ user: User }> {
     return this.request('/auth/me');
   }
